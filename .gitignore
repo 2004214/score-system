@@ -1,0 +1,5 @@
+.mimocode/
+.playwright-mcp/
+.spec-workflow/
+tests/
+docs/

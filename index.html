@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>综合素质评分系统</title>
+<link rel="stylesheet" href="lib/bootstrap.min.css">
+<style>
+:root{--primary:#2563eb;--success:#16a34a;--danger:#dc2626;--warning:#d97706;}
+body{background:#f1f5f9;font-size:14px;}
+.navbar{background:linear-gradient(135deg,#1e40af,#3b82f6)!important;}
+.navbar-brand{font-weight:700;font-size:1.2rem;letter-spacing:.5px;}
+.card{border:none;box-shadow:0 1px 4px rgba(0,0,0,.1);border-radius:10px;}
+.card-header{border-radius:10px 10px 0 0!important;font-weight:600;}
+.section-card .card-header{background:linear-gradient(90deg,#eff6ff,#dbeafe);color:#1e40af;border-bottom:2px solid #bfdbfe;}
+.score-badge{background:#dcfce7;color:#166534;font-weight:700;padding:2px 8px;border-radius:20px;font-size:.85rem;}
+.total-badge{background:#fef3c7;color:#92400e;font-weight:700;padding:3px 10px;border-radius:20px;}
+.table-summary th{background:#1e40af;color:#fff;white-space:nowrap;font-size:12px;vertical-align:middle;text-align:center;}
+.table-summary td{vertical-align:middle;font-size:12px;}
+.table-summary tr:hover td{background:#eff6ff;}
+.btn-add{border-style:dashed;}
+.record-item{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-bottom:8px;position:relative;}
+.record-item .btn-remove{position:absolute;top:6px;right:6px;}
+#loginOverlay{position:fixed;inset:0;background:rgba(15,23,42,.7);z-index:9999;display:flex;align-items:center;justify-content:center;}
+.login-card{width:360px;border-radius:16px;overflow:hidden;}
+.login-card .card-header{background:linear-gradient(135deg,#1e40af,#3b82f6);color:#fff;text-align:center;padding:24px;font-size:1.1rem;}
+.toast-container{position:fixed;top:70px;right:20px;z-index:9998;}
+#summaryWrapper{max-height:500px;overflow:auto;}
+.detail-text{font-size:11px;color:#475569;max-width:200px;word-break:break-all;}
+.nav-tabs .nav-link.active{font-weight:600;color:#1e40af;border-bottom:2px solid #1e40af;}
+.comp-search-wrap{position:relative;}
+.comp-search-input{width:100%;padding:3px 8px;font-size:12px;border:1px solid #ced4da;border-radius:4px 4px 0 0;border-bottom:none;background:#fff;}
+.comp-search-input:focus{outline:none;border-color:#86b7fe;}
+.comp-select-filtered{border-radius:0 0 4px 4px!important;}
+</style>
+</head>
+<body>
+
+<!-- 登录遮罩 -->
+<div id="loginOverlay">
+  <div class="login-card card shadow-lg">
+    <div class="card-header">
+      <div style="font-size:2rem;margin-bottom:8px;">🎓</div>
+      综合素质评分系统
+    </div>
+    <div class="card-body p-4">
+      <div class="mb-3">
+        <label class="form-label fw-semibold">账号</label>
+        <input type="text" id="loginUser" class="form-control" placeholder="请输入账号" value="admin">
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold">密码</label>
+        <input type="password" id="loginPass" class="form-control" placeholder="请输入密码" value="admin123">
+      </div>
+      <div id="loginError" class="text-danger small mb-2 d-none">账号或密码错误</div>
+      <button class="btn btn-primary w-100" onclick="doLogin()">登录</button>
+      <div class="text-center mt-3">
+        <small class="text-muted">默认管理员：admin / admin123 &nbsp;|&nbsp; 访客：guest / guest</small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 导航栏 -->
+<nav class="navbar navbar-dark sticky-top px-3 py-2">
+  <span class="navbar-brand">🎓 综合素质评分系统</span>
+  <div class="d-flex align-items-center gap-2">
+    <span id="navUserInfo" class="text-white-50 small"></span>
+    <button id="btnImport" class="btn btn-sm btn-outline-light d-none" onclick="document.getElementById('importFile').click()">📥 导入</button>
+    <input type="file" id="importFile" accept=".xlsx,.xls,.csv" class="d-none" onchange="handleImport(this)">
+    <button id="btnExport" class="btn btn-sm btn-outline-light d-none" onclick="exportExcel()">📤 导出Excel</button>
+    <button id="btnTemplate" class="btn btn-sm btn-outline-light d-none" onclick="downloadTemplate()">📋 下载模板</button>
+    <button id="btnChangePwd" class="btn btn-sm btn-outline-warning d-none" onclick="showChangePwd()">🔑 改密码</button>
+    <button class="btn btn-sm btn-outline-light" onclick="doLogout()">退出</button>
+  </div>
+</nav>
+
+<!-- Toast 容器 -->
+<div class="toast-container" id="toastContainer"></div>
+<!-- 主内容 -->
+<div class="container-fluid py-3">
+  <ul class="nav nav-tabs mb-3" id="mainTabs">
+    <li class="nav-item"><a class="nav-link active" href="#" onclick="switchTab('tabInput',this)">✏️ 录入评分</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('tabSummary',this)">📊 汇总表格</a></li>
+  </ul>
+
+  <!-- 录入面板 -->
+  <div id="tabInput">
+    <div class="row g-3">
+      <!-- 左侧：表单 -->
+      <div class="col-lg-8">
+
+        <!-- 基本信息 -->
+        <div class="card section-card mb-3">
+          <div class="card-header">📋 基本信息</div>
+          <div class="card-body">
+            <div class="row g-2">
+              <div class="col-md-3"><label class="form-label">姓名 <span class="text-danger">*</span></label><input type="text" id="f_name" class="form-control form-control-sm" placeholder="姓名"></div>
+              <div class="col-md-3"><label class="form-label">班级（单位）</label><input type="text" id="f_class" class="form-control form-control-sm" placeholder="班级"></div>
+              <div class="col-md-3"><label class="form-label">组别</label><input type="text" id="f_group" class="form-control form-control-sm" placeholder="组别"></div>
+              <div class="col-md-3"><label class="form-label">宿舍号</label><input type="text" id="f_dorm" class="form-control form-control-sm" placeholder="宿舍号"></div>
+              <div class="col-md-2"><label class="form-label">性别</label>
+                <select id="f_gender" class="form-select form-select-sm"><option value="">-</option><option>男</option><option>女</option></select>
+              </div>
+              <div class="col-md-3"><label class="form-label">民族</label><input type="text" id="f_nation" class="form-control form-control-sm" placeholder="民族"></div>
+              <div class="col-md-3"><label class="form-label">出生年月日</label><input type="date" id="f_birth" class="form-control form-control-sm"></div>
+              <div class="col-md-4"><label class="form-label">积极分子期数</label><input type="text" id="f_activist" class="form-control form-control-sm" placeholder="如：第X期"></div>
+              <div class="col-md-12">
+                <label class="form-label">备注</label>
+                <textarea id="f_remark" class="form-control form-control-sm" rows="2" placeholder="可记录国奖/国励、四六级、计算机等级考试、清零依据说明等"></textarea>
+              </div>
+            </div>
+            <!-- 附加信息：仅存储，不在界面显示，导出时体现 -->
+            <input type="hidden" id="f_failRecent" value="0">
+            <input type="hidden" id="f_failTotal" value="0">
+            <input type="hidden" id="f_cet" value="">
+            <input type="hidden" id="f_rank" value="">
+          </div>
+        </div>
+
+        <!-- 板块一 -->
+        <div class="card section-card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span>🏆 板块一：文体模块（素质拓展与全面发展）</span>
+            <span class="score-badge" id="score1">0分</span>
+          </div>
+          <div class="card-body">
+            <div class="alert alert-info py-2 small mb-2">
+              文体模块：参加校内文化、艺术、体育团体或注册社团活动按 1 分/季度计；文体竞赛按院级/校级/省部级/国家级前三名计分；获得校级优秀个人每次 +3 分。
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-12">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="b1_noViolation" onchange="calcBlock1()">
+                  <label class="form-check-label" for="b1_noViolation">
+                    1. 无违反校纪校规现象（早操、上课、宿舍管理、考试纪律等）<span class="text-success fw-semibold">+10分</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-md-4">
+                <label class="form-label">文体团体/社团活动参与季度数</label>
+                <input type="number" id="b1_club" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock1()">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">校级优秀个人次数</label>
+                <input type="number" id="b1_excellent" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock1()">
+              </div>
+            </div>
+            <label class="form-label fw-semibold">文体活动/竞赛获奖记录</label>
+            <div id="b1_competitions"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB1Competition()">+ 添加文体获奖</button>
+
+            <hr class="my-3">
+            <label class="form-label fw-semibold">公开刊物/媒体作品发表</label>
+            <div id="b1_publications"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB1Publication()">+ 添加作品发表</button>
+          </div>
+        </div>
+
+        <!-- 板块二 -->
+        <div class="card section-card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span>🌱 板块二：社会实践和志愿服务</span>
+            <span class="score-badge" id="score2">0分</span>
+          </div>
+          <div class="card-body">
+            <div class="row g-2 mb-2">
+              <div class="col-md-3"><label class="form-label">志愿汇总时长（小时）</label><input type="number" id="b2_volHours" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock2()"></div>
+              <div class="col-md-3"><label class="form-label">近一年志愿时长（小时）</label><input type="number" id="b2_volHoursRecent" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock2()"></div>
+              <div class="col-md-3"><label class="form-label">"三下乡"次数</label><input type="number" id="b2_sanxia" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock2()"></div>
+              <div class="col-md-3"><label class="form-label">"返家乡"次数</label><input type="number" id="b2_fanjia" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock2()"></div>
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-md-3"><label class="form-label">校院通报表扬次数</label><input type="number" id="b2_commendation" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock2()"></div>
+              <div class="col-md-3"><label class="form-label">支部活动参与次数</label><input type="number" id="b2_branchActivity" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock2()"></div>
+            </div>
+            <div class="alert alert-info py-2 small mb-2">社会实践获奖、优秀志愿者、星级志愿者等信息，请直接在下方“社会实践获奖记录”中填写，系统自动按最高奖和荣誉识别计分。</div>
+            <label class="form-label fw-semibold">社会实践获奖记录</label>
+            <div id="b2_practices"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB2Practice()">+ 添加社会实践获奖</button>
+
+            <hr class="my-3">
+            <label class="form-label fw-semibold">社会实践成果/志愿项目竞赛获奖</label>
+            <div id="b2_competitions"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB2Competition()">+ 添加社会实践类竞赛</button>
+          </div>
+        </div>
+
+        <!-- 板块三 -->
+        <div class="card section-card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span>👔 板块三：社会工作与党员义务</span>
+            <span class="score-badge" id="score3">0分</span>
+          </div>
+          <div class="card-body">
+            <div class="row g-2 mb-2">
+              <div class="col-md-4">
+                <label class="form-label">担任学生干部职务数量</label>
+                <input type="number" id="b3_cadre" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+              </div>
+              <div class="col-md-4">
+                <div class="form-check mt-4">
+                  <input class="form-check-input" type="checkbox" id="b3_cadreExcellent" onchange="calcBlock3()">
+                  <label class="form-check-label" for="b3_cadreExcellent">综测考评学生干部为优秀等级（+5分）</label>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">无故缺席活动/会议次数</label>
+                <input type="number" id="b3_absenceCount" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+              </div>
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-md-4">
+                <label class="form-label">优秀学生次数（+2分/次）</label>
+                <input type="number" id="b3_excellentStudent" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">优秀学生干部次数（+2分/次）</label>
+                <input type="number" id="b3_excellentCadre" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">优秀共青团员次数（+2分/次）</label>
+                <input type="number" id="b3_excellentLeague" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+              </div>
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-md-4">
+                <label class="form-label">帮扶学习困难同学季度数</label>
+                <input type="number" id="b3_studyHelpQuarter" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">帮助民族班级季度数</label>
+                <input type="number" id="b3_ethnicHelpQuarter" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">先进事迹</label>
+                <select id="b3_advancedDeed" class="form-select form-select-sm" onchange="calcBlock3()">
+                  <option value="">无</option>
+                  <option value="righteous">见义勇为、舍己救人</option>
+                  <option value="helpful">扶残助弱、拾金不昧</option>
+                </select>
+              </div>
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-md-4">
+                <label class="form-label">支部活动参与次数（+1分/次）</label>
+                <input type="number" id="b3_branchActivity" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">课堂回答问题次数（+1分/次）</label>
+                <input type="number" id="b3_answerQuestion" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+              </div>
+            </div>
+            <label class="form-label fw-semibold">职务情况描述（用于导出）</label>
+            <textarea id="b3_positionDesc" class="form-control form-control-sm" rows="2" placeholder="如：班长、团支书、学生会主席等" oninput="calcBlock3()"></textarea>
+
+            <hr class="my-3">
+            <label class="form-label fw-semibold">先进集体/表彰加分</label>
+            <div id="b3_collectiveAwards"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB3CollectiveAward()">+ 添加集体表彰</button>
+          </div>
+        </div>
+
+        <!-- 板块四 -->
+        <div class="card section-card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span>🔬 板块四：学科/科技竞赛</span>
+            <span class="score-badge" id="score4">0分</span>
+          </div>
+          <div class="card-body">
+            <div class="alert alert-info py-2 small mb-2">学科竞赛得分×0.6，非学科竞赛得分×0.4，两类分别累加后相加为板块四总分</div>
+            <div class="alert alert-warning py-2 small mb-2">先判断填的是哪个框：第一个框选择 144 项竞赛按学科竞赛×0.6；第二个框手动输入按非学科竞赛×0.4。</div>
+            <label class="form-label fw-semibold">竞赛获奖记录</label>
+            <div id="b4_competitions"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB4Competition()">+ 添加竞赛获奖</button>
+
+            <!-- 科技创新团队 -->
+            <hr class="my-3">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">科技创新团队</label>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="b4_techTeam" onchange="calcBlock4()">
+                <label class="form-check-label" for="b4_techTeam">
+                  参加学校学院科技创新团队（如南疆之星、沙漠胡杨、机器人产业班、比亚迪产业班等）
+                </label>
+                <div class="form-text">参加科技创新团队可加3分</div>
+              </div>
+            </div>
+
+            <!-- 大学生创新创业训练计划 -->
+            <hr class="my-3">
+            <label class="form-label fw-semibold">大学生创新创业训练计划</label>
+            <div id="b4_innovations"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1 mb-3" onclick="addB4Innovation()">+ 添加大创项目</button>
+
+            <!-- 出版学术著作 -->
+            <hr class="my-3">
+            <label class="form-label fw-semibold">出版学术著作</label>
+            <div id="b4_academicWorks"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1 mb-3" onclick="addB4AcademicWork()">+ 添加学术著作</button>
+
+            <!-- 发表学术论文 -->
+            <hr class="my-3">
+            <label class="form-label fw-semibold">发表学术论文</label>
+            <div id="b4_academicPapers"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1 mb-3" onclick="addB4AcademicPaper()">+ 添加学术论文</button>
+
+            <!-- 科技发明专利及软件著作权 -->
+            <hr class="my-3">
+            <label class="form-label fw-semibold">科技发明专利及软件著作权</label>
+            <div id="b4_patents"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1 mb-3" onclick="addB4Patent()">+ 添加专利/著作权</button>
+
+            <!-- 考取资格证书 -->
+            <hr class="my-3">
+            <label class="form-label fw-semibold">考取资格证书</label>
+            <div class="row g-2 mb-2">
+              <div class="col-md-4">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="b4_cet4" onchange="calcBlock4()">
+                  <label class="form-check-label" for="b4_cet4">英语四级（≥425分）</label>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="b4_cet6" onchange="calcBlock4()">
+                  <label class="form-check-label" for="b4_cet6">英语六级（≥425分）</label>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="b4_mandarin" onchange="calcBlock4()">
+                  <label class="form-check-label" for="b4_mandarin">普通话二级乙等及以上</label>
+                </div>
+              </div>
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-md-6">
+                <label class="form-label small">全国计算机等级考试</label>
+                <select id="b4_ncre" class="form-select form-select-sm" onchange="calcBlock4()">
+                  <option value="">未考取</option>
+                  <option value="ncre4Excellent">四级优秀</option>
+                  <option value="ncre4Pass">四级合格</option>
+                  <option value="ncre3Excellent">三级优秀</option>
+                  <option value="ncre3Pass">三级合格</option>
+                  <option value="ncre2Excellent">二级优秀</option>
+                  <option value="ncre2Pass">二级合格</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small">专业相关资格证书</label>
+                <div id="b4_professionalCerts"></div>
+                <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB4ProfessionalCert()">+ 添加专业证书</button>
+              </div>
+            </div>
+            <div class="alert alert-warning py-2 small mb-0">
+              <strong>重要提示：</strong>英语六级加分时不再重复计算四级；同一类型、同一等级的考试只享受一次加分，刷分不重复加分。
+            </div>
+          </div>
+        </div>
+
+        <!-- 板块五 -->
+        <div class="card section-card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span>📚 板块五：学业成绩</span>
+            <span class="score-badge" id="score5">0分</span>
+          </div>
+          <div class="card-body">
+            <div class="row g-2 mb-3">
+              <div class="col-md-6">
+                <label class="form-label">平均成绩</label>
+                <input type="number" id="b5_avg" class="form-control form-control-sm" min="0" max="100" step="0.1" value="70" oninput="calcBlock5()">
+                <div class="form-text">基准70分，每高1分+1分，不设最高分限制</div>
+              </div>
+            </div>
+
+            <hr class="my-3">
+            <label class="form-label fw-semibold">挂科情况</label>
+            <div id="b5_fails">
+              <div class="alert alert-info py-2 small mb-2">
+                <strong>挂科扣分规则（上不封顶）：</strong><br>
+                - 有一项挂科：-5分<br>
+                - 挂科且重修通过：-8分<br>
+                - 挂科且重修不通过：-10分<br>
+                - 挂科且重修未出成绩：-8分
+              </div>
+            </div>
+            <button class="btn btn-sm btn-outline-danger btn-add mt-1" onclick="addB5Fail()">+ 添加挂科记录</button>
+          </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="d-flex gap-2 mb-4">
+          <button class="btn btn-primary" onclick="saveStudent()" id="btnSave">💾 保存并计算</button>
+          <button class="btn btn-outline-secondary" onclick="clearForm()">🗑️ 清空表单</button>
+          <span id="editingHint" class="text-warning small align-self-center d-none">正在编辑记录 #<span id="editingId"></span></span>
+        </div>
+      </div>
+
+      <!-- 右侧：实时得分 -->
+      <div class="col-lg-4">
+        <div class="card sticky-top" style="top:70px;">
+          <div class="card-header" style="background:linear-gradient(90deg,#fef3c7,#fde68a);color:#92400e;">📊 实时得分预览</div>
+          <div class="card-body">
+            <table class="table table-sm mb-0">
+              <tbody>
+                <tr><td>板块一：文体模块</td><td class="text-end fw-bold" id="preview1">0</td></tr>
+                <tr><td>板块二：社会实践</td><td class="text-end fw-bold" id="preview2">0</td></tr>
+                <tr><td>板块三：社会工作</td><td class="text-end fw-bold" id="preview3">0</td></tr>
+                <tr><td>板块四：学科竞赛</td><td class="text-end fw-bold" id="preview4">0</td></tr>
+                <tr><td>板块五：学业成绩</td><td class="text-end fw-bold" id="preview5">0</td></tr>
+                <tr class="table-warning"><td><strong>总分</strong></td><td class="text-end"><strong id="previewTotal">0</strong></td></tr>
+              </tbody>
+            </table>
+            <hr>
+            <div id="previewDetail" class="small text-muted" style="max-height:300px;overflow-y:auto;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 汇总表格面板 -->
+  <div id="tabSummary" class="d-none">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>📊 学生汇总表格</span>
+        <div class="d-flex gap-2 align-items-center">
+          <input type="text" id="searchInput" class="form-control form-control-sm" style="width:180px" placeholder="搜索姓名/班级/组别..." oninput="renderSummary()">
+          <select id="filterGroup" class="form-select form-select-sm" style="width:120px" onchange="renderSummary()">
+            <option value="">全部组别</option>
+          </select>
+          <span class="text-muted small" id="summaryCount"></span>
+          <button id="btnClearSummary" class="btn btn-sm btn-outline-danger d-none" onclick="clearAllStudents()">🗑️ 一键清除</button>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div id="summaryWrapper">
+          <table class="table table-bordered table-striped table-summary mb-0" id="summaryTable">
+            <thead id="summaryHead"></thead>
+            <tbody id="summaryBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 修改密码模态框 -->
+<div class="modal fade" id="changePwdModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header"><h6 class="modal-title">修改密码</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-2"><label class="form-label small">新密码</label><input type="password" id="newPwd1" class="form-control form-control-sm"></div>
+        <div class="mb-2"><label class="form-label small">确认新密码</label><input type="password" id="newPwd2" class="form-control form-control-sm"></div>
+        <div id="pwdError" class="text-danger small d-none"></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-primary btn-sm" onclick="doChangePwd()">确认修改</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- 导入预览模态框 -->
+<div class="modal fade" id="importModal" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header"><h6 class="modal-title">导入预览</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-2 d-flex gap-3">
+          <div class="form-check"><input class="form-check-input" type="radio" name="importMode" id="modeAppend" value="append" checked><label class="form-check-label" for="modeAppend">追加导入</label></div>
+          <div class="form-check"><input class="form-check-input" type="radio" name="importMode" id="modeOverwrite" value="overwrite"><label class="form-check-label" for="modeOverwrite">覆盖导入（清空现有数据）</label></div>
+        </div>
+        <div id="importPreview" style="max-height:400px;overflow:auto;"></div>
+      </div>
+      <div class="modal-footer">
+        <span id="importCount" class="text-muted small me-auto"></span>
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary btn-sm" onclick="confirmImport()">确认导入</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="lib/bootstrap.bundle.min.js"></script>
+<script src="lib/xlsx.full.min.js"></script>
+<script src="rules.local.js?v=20260520-offline-1"></script>
+<script src="app.js?v=20260520-local-refresh-3"></script>
+</body>
+</html>
