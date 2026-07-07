@@ -3,7 +3,11 @@ let RULES = {};
 let currentUser = null;
 let editingStudentId = null;
 let importBuffer = [];
+let restoreBuffer = [];
 let db = null;
+let _formDirty = false;
+let _sortState = { col: -1, asc: true };
+let _selectedIds = new Set();
 // 各板块最新 detail 缓存，避免循环调用
 const _detailCache = { b1:'', b2:'', b3:'', b4a:'', b4n:'', b5:'', zeroed:false };
 let _academicCompetitionMatcher = null;
@@ -17,6 +21,11 @@ async function init() {
   setTimeout(function() {
     calcBlock1(); calcBlock2(); calcBlock3(); calcBlock4(); calcBlock5();
   }, 0);
+  // 监听表单变化，标记为已修改
+  document.querySelectorAll('#tabInput input, #tabInput select, #tabInput textarea').forEach(function(el) {
+    el.addEventListener('input', markFormDirty);
+    el.addEventListener('change', markFormDirty);
+  });
 }
 
 async function loadRules() {
@@ -116,7 +125,7 @@ function showApp() {
   document.getElementById('navUserInfo').textContent =
     currentUser.name + ' (' + (currentUser.role === 'admin' ? '管理员' : '访客') + ')';
   const isAdmin = currentUser.role === 'admin';
-  ['btnImport','btnExport','btnTemplate','btnChangePwd'].forEach(id => {
+  ['btnImport','btnExport','btnTemplate','btnChangePwd','btnBackup','btnRestore','btnBatchDelete'].forEach(id => {
     document.getElementById(id).classList.toggle('d-none', !isAdmin);
   });
   document.getElementById('btnClearSummary').classList.toggle('d-none', !isAdmin);
@@ -1422,6 +1431,7 @@ async function saveStudent() {
   try {
     await dbPut(data);
     showToast(editingStudentId !== null ? '更新成功' : '保存成功', 'success');
+    markFormClean();
     clearForm();
     renderSummary();
   } catch(e) {
@@ -1431,6 +1441,7 @@ async function saveStudent() {
 
 function clearForm() {
   editingStudentId = null;
+  markFormClean();
   document.getElementById('editingHint').classList.add('d-none');
   ['f_name','f_class','f_group','f_dorm','f_gender','f_nation','f_birth','f_activist',
    'f_failRecent','f_failTotal','f_cet','f_rank','f_remark'].forEach(function(id) {
@@ -1545,25 +1556,56 @@ async function renderSummary() {
     const matchGroup = !filterGroup || (s.group||'') === filterGroup;
     return matchSearch && matchGroup;
   });
+
+  // 排序
+  if (_sortState.col >= 0) {
+    const colKeys = ['_index','className','name','b1','b2','b3','b4','b5','total'];
+    const key = colKeys[_sortState.col];
+    filtered.sort(function(a, b) {
+      let va, vb;
+      if (key === '_index') { va = a.id; vb = b.id; }
+      else if (key === 'className' || key === 'name') { va = (a[key]||'').toString(); vb = (b[key]||'').toString(); }
+      else { va = ((a.scores||{})[key])||0; vb = ((b.scores||{})[key])||0; }
+      if (typeof va === 'string') {
+        const cmp = va.localeCompare(vb, 'zh-CN');
+        return _sortState.asc ? cmp : -cmp;
+      }
+      return _sortState.asc ? (va - vb) : (vb - va);
+    });
+  }
+
   document.getElementById('summaryCount').textContent = '共 ' + filtered.length + ' 条';
+
+  // 统计信息
+  renderStats(calcStats(filtered));
 
   const isAdmin = currentUser && currentUser.role === 'admin';
   const head = document.getElementById('summaryHead');
   const body = document.getElementById('summaryBody');
 
+  const sortable = ' style="cursor:pointer;user-select:none;" onclick="sortSummary(';
   head.innerHTML = '<tr>' +
-    '<th>序号</th><th>班级</th><th>姓名</th>' +
-    '<th>板块一<br>文体模块</th><th>板块二<br>社会实践</th>' +
-    '<th>板块三<br>社会工作</th><th>板块四<br>学科竞赛</th>' +
-    '<th>板块五<br>学业成绩</th><th>总分</th>' +
+    (isAdmin ? '<th><input type="checkbox" onchange="toggleSelectAll(this)"></th>' : '') +
+    '<th' + sortable + '0)">序号' + getSortIcon(0) + '</th>' +
+    '<th' + sortable + '1)">班级' + getSortIcon(1) + '</th>' +
+    '<th' + sortable + '2)">姓名' + getSortIcon(2) + '</th>' +
+    '<th' + sortable + '3)">板块一<br>文体模块' + getSortIcon(3) + '</th>' +
+    '<th' + sortable + '4)">板块二<br>社会实践' + getSortIcon(4) + '</th>' +
+    '<th' + sortable + '5)">板块三<br>社会工作' + getSortIcon(5) + '</th>' +
+    '<th' + sortable + '6)">板块四<br>学科竞赛' + getSortIcon(6) + '</th>' +
+    '<th' + sortable + '7)">板块五<br>学业成绩' + getSortIcon(7) + '</th>' +
+    '<th' + sortable + '8)">总分' + getSortIcon(8) + '</th>' +
     (isAdmin ? '<th>操作</th>' : '') + '</tr>';
 
   body.innerHTML = filtered.map(function(s, i) {
     const sc = s.scores || {};
+    const checked = _selectedIds.has(s.id) ? ' checked' : '';
+    const cb = isAdmin ? '<td><input type="checkbox" class="row-select" data-id="' + s.id + '"' + checked + ' onchange="toggleSelectOne(this)"></td>' : '';
     const ops = isAdmin ?
       '<td><button class="btn btn-xs btn-outline-primary btn-sm me-1" onclick="editStudent(' + s.id + ')">编辑</button>' +
       '<button class="btn btn-xs btn-outline-danger btn-sm" onclick="deleteStudent(' + s.id + ')">删除</button></td>' : '';
     return '<tr>' +
+      cb +
       '<td>' + (i+1) + '</td>' +
       '<td>' + (s.className||'') + '</td>' +
       '<td><strong>' + (s.name||'') + '</strong></td>' +
@@ -2198,5 +2240,201 @@ async function confirmImport() {
   renderSummary();
 }
 
+// ===== 数据备份/恢复 =====
+async function exportJSON() {
+  if (!(currentUser && currentUser.role === 'admin')) {
+    showToast('仅管理员可执行该操作', 'warning');
+    return;
+  }
+  const all = await dbGetAll();
+  if (!all.length) { showToast('暂无数据可备份', 'warning'); return; }
+  const backup = {
+    version: 1,
+    exportTime: new Date().toISOString(),
+    count: all.length,
+    data: all
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  const date = new Date();
+  const dateStr = date.getFullYear() + pad(date.getMonth()+1) + pad(date.getDate()) + pad(date.getHours()) + pad(date.getMinutes());
+  link.download = '综合素质评分备份_' + dateStr + '.json';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  showToast('备份成功，共 ' + all.length + ' 条记录', 'success');
+}
+
+function handleRestore(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const backup = JSON.parse(e.target.result);
+      if (!backup.data || !Array.isArray(backup.data)) {
+        showToast('无效的备份文件', 'danger');
+        return;
+      }
+      restoreBuffer = backup.data;
+      document.getElementById('restorePreview').innerHTML =
+        '<div class="alert alert-info py-2 mb-2">' +
+        '备份时间：' + (backup.exportTime || '未知') + '<br>' +
+        '记录数量：' + backup.data.length + ' 条' +
+        '</div>';
+      new bootstrap.Modal(document.getElementById('restoreModal')).show();
+    } catch(err) {
+      showToast('文件解析失败：' + err.message, 'danger');
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+async function confirmRestore() {
+  if (!restoreBuffer.length) { showToast('无数据可恢复', 'warning'); return; }
+  const mode = document.querySelector('input[name="restoreMode"]:checked').value;
+  if (mode === 'overwrite') {
+    if (!confirm('覆盖恢复将清空所有现有数据，确认继续？')) return;
+    await dbClear();
+  }
+  for (const s of restoreBuffer) {
+    const record = Object.assign({}, s);
+    delete record.id;
+    await dbPut(record);
+  }
+  bootstrap.Modal.getInstance(document.getElementById('restoreModal')).hide();
+  showToast('恢复成功，共 ' + restoreBuffer.length + ' 条', 'success');
+  restoreBuffer = [];
+  renderSummary();
+}
+
+// ===== 汇总统计 =====
+function calcStats(all) {
+  if (!all.length) return null;
+  const stats = { count: all.length, b1: [], b2: [], b3: [], b4: [], b5: [], total: [] };
+  all.forEach(function(s) {
+    const sc = s.scores || {};
+    stats.b1.push(sc.b1 || 0);
+    stats.b2.push(sc.b2 || 0);
+    stats.b3.push(sc.b3 || 0);
+    stats.b4.push(sc.b4 || 0);
+    stats.b5.push(sc.b5 || 0);
+    stats.total.push(sc.total || 0);
+  });
+  function avg(arr) { return arr.length ? Math.round(arr.reduce(function(a,b){return a+b;},0) / arr.length * 10) / 10 : 0; }
+  function min(arr) { return arr.length ? Math.min.apply(null, arr) : 0; }
+  function max(arr) { return arr.length ? Math.max.apply(null, arr) : 0; }
+  return {
+    count: stats.count,
+    b1: { avg: avg(stats.b1), min: min(stats.b1), max: max(stats.b1) },
+    b2: { avg: avg(stats.b2), min: min(stats.b2), max: max(stats.b2) },
+    b3: { avg: avg(stats.b3), min: min(stats.b3), max: max(stats.b3) },
+    b4: { avg: avg(stats.b4), min: min(stats.b4), max: max(stats.b4) },
+    b5: { avg: avg(stats.b5), min: min(stats.b5), max: max(stats.b5) },
+    total: { avg: avg(stats.total), min: min(stats.total), max: max(stats.total) }
+  };
+}
+
+function renderStats(stats) {
+  const panel = document.getElementById('statsPanel');
+  const row = document.getElementById('statsRow');
+  if (!stats) { panel.classList.add('d-none'); return; }
+  panel.classList.remove('d-none');
+  const items = [
+    { label: '总人数', value: stats.count, color: 'primary' },
+    { label: '总分均值', value: stats.total.avg, color: 'success' },
+    { label: '总分最高', value: stats.total.max, color: 'danger' },
+    { label: '总分最低', value: stats.total.min, color: 'warning' }
+  ];
+  row.innerHTML = items.map(function(item) {
+    return '<div class="col-md-3 col-6">' +
+      '<div class="card border-' + item.color + '">' +
+      '<div class="card-body text-center py-2">' +
+      '<div class="small text-muted">' + item.label + '</div>' +
+      '<div class="fw-bold text-' + item.color + ' fs-5">' + item.value + '</div>' +
+      '</div></div></div>';
+  }).join('');
+}
+
+// ===== 表格排序 =====
+function sortSummary(col) {
+  if (_sortState.col === col) {
+    _sortState.asc = !_sortState.asc;
+  } else {
+    _sortState.col = col;
+    _sortState.asc = true;
+  }
+  renderSummary();
+}
+
+function getSortIcon(col) {
+  if (_sortState.col !== col) return ' ↕';
+  return _sortState.asc ? ' ↑' : ' ↓';
+}
+
+// ===== 批量删除 =====
+function toggleSelectAll(cb) {
+  const checkboxes = document.querySelectorAll('.row-select');
+  checkboxes.forEach(function(checkbox) {
+    const id = parseInt(checkbox.dataset.id);
+    checkbox.checked = cb.checked;
+    if (cb.checked) _selectedIds.add(id);
+    else _selectedIds.delete(id);
+  });
+  updateBatchDeleteBtn();
+}
+
+function toggleSelectOne(cb) {
+  const id = parseInt(cb.dataset.id);
+  if (cb.checked) _selectedIds.add(id);
+  else _selectedIds.delete(id);
+  updateBatchDeleteBtn();
+}
+
+function updateBatchDeleteBtn() {
+  const btn = document.getElementById('btnBatchDelete');
+  if (_selectedIds.size > 0) {
+    btn.textContent = '🗑️ 批量删除(' + _selectedIds.size + ')';
+    btn.classList.remove('d-none');
+  } else {
+    btn.classList.add('d-none');
+  }
+}
+
+async function batchDelete() {
+  if (!(currentUser && currentUser.role === 'admin')) {
+    showToast('仅管理员可执行该操作', 'warning');
+    return;
+  }
+  if (!_selectedIds.size) { showToast('未选择任何记录', 'warning'); return; }
+  if (!confirm('确认删除选中的 ' + _selectedIds.size + ' 条记录？')) return;
+  for (const id of _selectedIds) {
+    await dbDelete(id);
+  }
+  showToast('已删除 ' + _selectedIds.size + ' 条记录', 'success');
+  _selectedIds.clear();
+  renderSummary();
+}
+
+// ===== 未保存提示 =====
+function markFormDirty() {
+  _formDirty = true;
+}
+
+function markFormClean() {
+  _formDirty = false;
+}
+
 // ===== 启动 =====
 window.addEventListener('DOMContentLoaded', init);
+window.addEventListener('beforeunload', function(e) {
+  if (_formDirty) {
+    e.preventDefault();
+    e.returnValue = '您有未保存的修改，确定要离开吗？';
+    return e.returnValue;
+  }
+});
