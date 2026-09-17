@@ -2024,19 +2024,72 @@ function handleImport(input) {
   const file = input.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = async function(e) {
     try {
-      const wb = XLSX.read(e.target.result, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const data = sheetToObjects(ws);
-      importBuffer = data.map(parseImportRow).filter(function(s){ return s.name; });
-      showImportPreview();
+      if (!window.ScoreImportParser) throw new Error('智能导入模块未加载');
+      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+      const parsed = window.ScoreImportParser.parseWorkbook(wb, XLSX);
+      const existing = await dbGetAll();
+      importBuffer = prepareImportRows(parsed, existing);
+      if (!importBuffer.length) throw new Error('未找到可导入的人员记录');
+      showImportPreview(parsed.sheetName, file.name);
     } catch(err) {
       showToast('文件解析失败：' + err.message, 'danger');
     }
   };
   reader.readAsArrayBuffer(file);
   input.value = '';
+}
+
+function getImportIdentity(record) {
+  if (!record || !window.ScoreImportParser) return '';
+  const normalize = window.ScoreImportParser.normalizeIdentity;
+  const name = normalize(record.name);
+  const className = normalize(record.className);
+  return name ? className + '|' + name : '';
+}
+
+function prepareImportRows(parsed, existing) {
+  const existingByIdentity = new Map();
+  (existing || []).forEach(function(record) {
+    const key = getImportIdentity(record);
+    if (key) existingByIdentity.set(key, record);
+  });
+
+  return (parsed.rows || []).map(function(item) {
+    const record = item.record || parseImportRow(item.raw || {});
+    const warnings = (item.warnings || []).slice();
+    const evidence = (item.evidence || []).slice();
+
+    if (!record.name) {
+      warnings.push({ field: '姓名', message: '缺少姓名，不能导入该行', evidence: '', severity: 'error' });
+    }
+
+    if (item.record) {
+      record.scores = calcScoresForRecord(record);
+      record.details = buildDetailsForRecord(record);
+      const source = record.sourceDetails || {};
+      if (source.practice) record.details.practiceText = source.practice;
+      if (source.volunteerHonor) record.details.volHonorText = source.volunteerHonor;
+      if (source.academicCompetition) record.details.b4Academic = source.academicCompetition;
+      if (source.nonAcademicCompetition) record.details.b4NonAcademic = source.nonAcademicCompetition;
+      if (source.culture) record.details.b1 = source.culture;
+    }
+
+    const identity = getImportIdentity(record);
+    const matched = identity ? existingByIdentity.get(identity) : null;
+    const invalid = warnings.some(function(warning) { return warning.severity === 'error'; });
+    return {
+      sourceRow: item.sourceRow,
+      record: record,
+      warnings: warnings,
+      evidence: evidence,
+      status: invalid ? 'invalid' : (warnings.length ? 'warning' : 'ready'),
+      selected: invalid ? false : item.selected !== false,
+      existingId: matched ? matched.id : null,
+      matchType: matched ? 'update' : 'new'
+    };
+  });
 }
 
 function parseImportRow(row) {
@@ -2052,6 +2105,7 @@ function parseImportRow(row) {
   }
 
   const isStandardScoreSheet =
+    row.__scoreSystemTemplate === 'standard' ||
     !!v('板块一得分') ||
     !!v('总分') ||
     !!v('学科竞赛') ||
@@ -2214,28 +2268,88 @@ function buildDetailsForRecord(s) {
   };
 }
 
-function showImportPreview() {
+function showImportPreview(sheetName, fileName) {
   const modal = new bootstrap.Modal(document.getElementById('importModal'));
-  document.getElementById('importCount').textContent = '共 ' + importBuffer.length + ' 条记录';
-  const table = '<table class="table table-sm table-bordered"><thead><tr><th>姓名</th><th>班级</th><th>总分</th></tr></thead><tbody>' +
-    importBuffer.map(function(s) {
-      return '<tr><td>' + (s.name||'') + '</td><td>' + (s.className||'') + '</td><td>' + ((s.scores||{}).total||0) + '</td></tr>';
-    }).join('') + '</tbody></table>';
+  document.getElementById('importSourceInfo').textContent =
+    (fileName ? fileName + ' · ' : '') + '数据表：' + (sheetName || '未知');
+  const table = '<div class="table-responsive"><table class="table table-sm table-bordered align-middle import-preview-table">' +
+    '<thead><tr><th class="text-center">导入</th><th>源行</th><th>姓名</th><th>班级</th>' +
+    '<th>板块一</th><th>板块二</th><th>板块三</th><th>板块四</th><th>板块五</th><th>总分</th><th>状态与依据</th></tr></thead><tbody>' +
+    importBuffer.map(function(item, index) {
+      const record = item.record || {};
+      const scores = record.scores || {};
+      const rowClass = item.status === 'invalid' ? 'table-danger' : (item.status === 'warning' ? 'table-warning' : '');
+      const statusLabel = item.status === 'invalid' ? '不可导入' : (item.matchType === 'update' ? '将更新' : '新增');
+      const statusClass = item.status === 'invalid' ? 'bg-danger' : (item.matchType === 'update' ? 'bg-info text-dark' : 'bg-success');
+      const warningItems = (item.warnings || []).map(function(warning) {
+        const evidence = warning.evidence ? '：' + warning.evidence : '';
+        return '<li><strong>' + escapeHtml(warning.field || '识别') + '</strong> ' +
+          escapeHtml(warning.message || '') + escapeHtml(evidence) + '</li>';
+      }).join('');
+      const evidenceItems = (item.evidence || []).map(function(text) {
+        return '<li>' + escapeHtml(text) + '</li>';
+      }).join('');
+      const detail = warningItems || evidenceItems
+        ? '<details><summary>' + ((item.warnings || []).length ? '查看警告与识别依据' : '查看识别依据') +
+          '</summary><ul class="mb-0 ps-3">' + warningItems + evidenceItems + '</ul></details>'
+        : '<span class="text-muted">已按明确字段识别</span>';
+      return '<tr class="' + rowClass + '">' +
+        '<td class="text-center"><input class="form-check-input import-row-check" type="checkbox" ' +
+          (item.selected ? 'checked ' : '') + (item.status === 'invalid' ? 'disabled ' : '') +
+          'aria-label="选择第' + escapeHtml(String(item.sourceRow || '')) + '行" onchange="setImportSelection(' + index + ', this.checked)"></td>' +
+        '<td>' + escapeHtml(String(item.sourceRow || '')) + '</td>' +
+        '<td>' + escapeHtml(record.name || '') + '</td>' +
+        '<td>' + escapeHtml(record.className || '') + '</td>' +
+        '<td>' + escapeHtml(String(scores.b1 || 0)) + '</td>' +
+        '<td>' + escapeHtml(String(scores.b2 || 0)) + '</td>' +
+        '<td>' + escapeHtml(String(scores.b3 || 0)) + '</td>' +
+        '<td>' + escapeHtml(String(scores.b4 || 0)) + '</td>' +
+        '<td>' + escapeHtml(String(scores.b5 || 0)) + '</td>' +
+        '<td><strong>' + escapeHtml(String(scores.total || 0)) + '</strong></td>' +
+        '<td><span class="badge ' + statusClass + ' me-1">' + statusLabel + '</span>' + detail + '</td>' +
+        '</tr>';
+    }).join('') + '</tbody></table></div>';
   document.getElementById('importPreview').innerHTML = table;
+  updateImportSelectionCount();
   modal.show();
+}
+
+function setImportSelection(index, checked) {
+  if (!importBuffer[index] || importBuffer[index].status === 'invalid') return;
+  importBuffer[index].selected = !!checked;
+  updateImportSelectionCount();
+}
+
+function updateImportSelectionCount() {
+  const selected = importBuffer.filter(function(item) { return item.selected && item.status !== 'invalid'; }).length;
+  const warningCount = importBuffer.filter(function(item) { return item.status === 'warning'; }).length;
+  const updateCount = importBuffer.filter(function(item) { return item.selected && item.matchType === 'update'; }).length;
+  const invalidCount = importBuffer.filter(function(item) { return item.status === 'invalid'; }).length;
+  document.getElementById('importCount').textContent =
+    '共' + importBuffer.length + '行，已选' + selected + '条，警告' + warningCount + '条，将更新' + updateCount + '条，不可导入' + invalidCount + '条';
+  const button = document.getElementById('btnConfirmImport');
+  if (button) button.disabled = selected === 0;
 }
 
 async function confirmImport() {
   const mode = document.querySelector('input[name="importMode"]:checked').value;
+  const selectedItems = importBuffer.filter(function(item) { return item.selected && item.status !== 'invalid'; });
+  if (!selectedItems.length) {
+    showToast('请至少选择一条可导入记录', 'warning');
+    return;
+  }
   if (mode === 'overwrite') {
     if (!confirm('覆盖导入将清空所有现有数据，确认继续？')) return;
     await dbClear();
   }
-  for (const s of importBuffer) {
-    await dbPut(s);
+  for (const item of selectedItems) {
+    const record = Object.assign({}, item.record);
+    if (mode === 'append' && item.existingId) record.id = item.existingId;
+    else delete record.id;
+    await dbPut(record);
   }
   bootstrap.Modal.getInstance(document.getElementById('importModal')).hide();
-  showToast('导入成功，共 ' + importBuffer.length + ' 条', 'success');
+  showToast('导入成功，共 ' + selectedItems.length + ' 条', 'success');
   importBuffer = [];
   renderSummary();
 }

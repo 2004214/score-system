@@ -2,4 +2,7 @@
 .playwright-mcp/
 .spec-workflow/
 tests/
+!tests/
+!tests/*.test.js
+tests/private/
 docs/
