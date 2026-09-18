@@ -2027,8 +2027,13 @@ function handleImport(input) {
   reader.onload = async function(e) {
     try {
       if (!window.ScoreImportParser) throw new Error('智能导入模块未加载');
-      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
-      const parsed = window.ScoreImportParser.parseWorkbook(wb, XLSX);
+      // Keep Excel dates as serial values. Converting them to Date objects here
+      // applies the browser timezone and can shift a birthday to the previous day.
+      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: false });
+      const academicCompetitions = (RULES.block4 && RULES.block4.academicCompetitions) || [];
+      const parsed = window.ScoreImportParser.parseWorkbook(wb, XLSX, {
+        academicCompetitions: academicCompetitions
+      });
       const existing = await dbGetAll();
       importBuffer = prepareImportRows(parsed, existing);
       if (!importBuffer.length) throw new Error('未找到可导入的人员记录');

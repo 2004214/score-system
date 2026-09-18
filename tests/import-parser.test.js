@@ -1,9 +1,20 @@
 'use strict';
 
+process.env.TZ = 'Asia/Shanghai';
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const XLSX = require('../lib/xlsx.full.min.js');
 const parser = require('../import-parser.js');
+const RULES = require('../rules.json');
+
+function parseWorkbook(workbook) {
+  const serialized = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  const importedWorkbook = XLSX.read(serialized, { type: 'buffer', cellDates: false });
+  return parser.parseWorkbook(importedWorkbook, XLSX, {
+    academicCompetitions: RULES.block4.academicCompetitions
+  });
+}
 
 function createDevelopmentWorkbook() {
   const headers = [
@@ -19,7 +30,7 @@ function createDevelopmentWorkbook() {
   const rows = [
     headers,
     [
-      1, '测试2024级1班', '张同学', '女', '汉族', new Date('2005-06-12T00:00:00Z'), '78期',
+      1, '测试2024级1班', '张同学', '女', '汉族', new Date(2005, 8, 30), '78期',
       '班长、学生会宣传部副部长',
       '2025年塔里木大学暑期“三下乡”社会实践活动校级二等奖',
       'CIMC“西门子杯”中国智能制造挑战赛校级二等奖',
@@ -64,6 +75,15 @@ test('prefers explicit levels and infers organizer levels', () => {
   assert.equal(parser.inferLevel('国家级项目获校级二等奖').conflict, true);
 });
 
+test('matches every official academic competition to its canonical library name', () => {
+  const competitions = RULES.block4.academicCompetitions;
+  assert.equal(competitions.length, 144);
+  competitions.forEach(name => {
+    assert.equal(parser.findAcademicCompetition(name + ' 校级二等奖', competitions), name);
+  });
+  assert.equal(parser.findAcademicCompetition('完全不在目录中的匿名项目校级一等奖', competitions), null);
+});
+
 test('keeps conflicting competition levels unscored with a warning', () => {
   const wb = createDevelopmentWorkbook();
   const ws = wb.Sheets['情况了解'];
@@ -83,13 +103,13 @@ test('detects the personnel sheet and ignores the competition reference sheet', 
 });
 
 test('parses merged J/K competition columns and narrative scoring inputs', () => {
-  const parsed = parser.parseWorkbook(createDevelopmentWorkbook(), XLSX);
+  const parsed = parseWorkbook(createDevelopmentWorkbook());
   assert.equal(parsed.rows.length, 2);
 
   const first = parsed.rows[0];
   assert.equal(first.sourceRow, 2);
   assert.equal(first.record.name, '张同学');
-  assert.equal(first.record.birth, '2005-06-12');
+  assert.equal(first.record.birth, '2005-09-30');
   assert.equal(first.record.b2.volHours, 120.5);
   assert.equal(first.record.b2.volHoursRecent, 75.5);
   assert.equal(first.record.b2.sanxia, 1);
@@ -99,17 +119,44 @@ test('parses merged J/K competition columns and narrative scoring inputs', () =>
   assert.equal(first.record.b5.fails.length, 1);
   assert.equal(first.record.b4.competitions.length, 2);
   assert.equal(first.record.b4.competitions[0].isAcademic, true);
+  assert.equal(first.record.b4.competitions[0].selectedName, 'CIMC“西门子杯”中国智能制造挑战赛');
+  assert.equal(first.record.b4.competitions[0].isManual, false);
   assert.equal(first.record.b4.competitions[1].isAcademic, false);
   assert.equal(first.record.b1.competitions[0].rank, '第二名');
   assert.equal(first.record.b1.excellent, 1);
 });
 
 test('marks inferred levels and numeric CET4 assumptions as warnings', () => {
-  const parsed = parser.parseWorkbook(createDevelopmentWorkbook(), XLSX);
+  const parsed = parseWorkbook(createDevelopmentWorkbook());
   const second = parsed.rows[1];
   assert.equal(second.record.b4.cet4, true);
   assert.ok(second.record.b4.innovations.some(item => item.establish === 'nationalEstablish'));
   assert.ok(second.warnings.some(item => item.field === '英语成绩'));
+});
+
+test('does not score unmatched J-column entries as academic competitions', () => {
+  const wb = createDevelopmentWorkbook();
+  const ws = wb.Sheets['情况了解'];
+  ws.J2.v = '完全不在目录中的匿名项目校级一等奖';
+  ws.J2.w = '完全不在目录中的匿名项目校级一等奖';
+
+  const first = parseWorkbook(wb).rows[0];
+  assert.equal(first.record.b4.competitions.filter(item => item.isAcademic).length, 0);
+  assert.ok(first.warnings.some(item => item.field === '学科竞赛' && /144项/.test(item.message)));
+});
+
+test('matches official academic competitions from either competition column', () => {
+  const wb = createDevelopmentWorkbook();
+  const ws = wb.Sheets['情况了解'];
+  ws.K2.v = '全国大学生电子设计竞赛国家级一等奖';
+  ws.K2.w = '全国大学生电子设计竞赛国家级一等奖';
+
+  const first = parseWorkbook(wb).rows[0];
+  const matched = first.record.b4.competitions.find(item => item.name === '全国大学生电子设计竞赛');
+  assert.ok(matched);
+  assert.equal(matched.selectedName, '全国大学生电子设计竞赛');
+  assert.equal(matched.isAcademic, true);
+  assert.equal(matched.isManual, false);
 });
 
 test('keeps the existing two-row score template importable', () => {

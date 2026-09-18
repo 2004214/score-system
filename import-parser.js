@@ -103,6 +103,56 @@
     return '';
   }
 
+  function normalizeCompetitionName(value) {
+    return cleanText(value)
+      .toUpperCase()
+      .replace(/20\d{2}(?:年|赛季)?/g, '')
+      .replace(/[“”"‘’'`]/g, '')
+      .replace(/[（()）【】\[\]{}<>《》]/g, '')
+      .replace(/[—\-‐‑‒–―·•,，.。;；:：/\\|]/g, '')
+      .replace(/\s+/g, '');
+  }
+
+  function getCompetitionCoreName(value) {
+    return normalizeCompetitionName(value)
+      .replace(/全国|中国|国际|高校|高等学校|大学生|本科院校|职业院校|院校|学校/g, '')
+      .replace(/挑战赛|选拔赛|竞赛|大赛|比赛|论坛|作品展|年会展示/g, '');
+  }
+
+  function findAcademicCompetition(value, competitions) {
+    const input = normalizeCompetitionName(value);
+    const inputCore = getCompetitionCoreName(value);
+    if (!input || !Array.isArray(competitions) || !competitions.length) return null;
+
+    const ranked = competitions.map(function(name) {
+      const normalized = normalizeCompetitionName(name);
+      const core = getCompetitionCoreName(name);
+      let score = 0;
+      if (input === normalized) score = 100000 + normalized.length;
+      else if (normalized.length >= 4 && input.indexOf(normalized) >= 0) score = 80000 + normalized.length;
+      else if (input.length >= 4 && normalized.indexOf(input) >= 0) score = 70000 + input.length;
+      else if (core.length >= 4 && inputCore.indexOf(core) >= 0) score = 60000 + core.length;
+      else if (inputCore.length >= 4 && core.indexOf(inputCore) >= 0) score = 50000 + inputCore.length;
+
+      const cups = cleanText(name).match(/[\u4e00-\u9fa5A-Za-z0-9·•]+杯/g) || [];
+      cups.forEach(function(cup) {
+        const alias = normalizeCompetitionName(cup);
+        if (alias.length >= 3 && input.indexOf(alias) >= 0) score = Math.max(score, 40000 + alias.length);
+      });
+      const abbreviations = cleanText(name).toUpperCase().match(/[A-Z][A-Z0-9-]{1,}/g) || [];
+      abbreviations.forEach(function(abbreviation) {
+        const alias = normalizeCompetitionName(abbreviation);
+        if (alias.length >= 2 && input.indexOf(alias) >= 0) score = Math.max(score, 30000 + alias.length);
+      });
+      return { name: name, score: score };
+    }).filter(function(item) { return item.score > 0; })
+      .sort(function(a, b) { return b.score - a.score; });
+
+    if (!ranked.length) return null;
+    if (ranked.length > 1 && ranked[0].score === ranked[1].score) return null;
+    return ranked[0].name;
+  }
+
   function detectCultureRank(text) {
     const value = cleanText(text);
     if (/(?:第一名|冠军|一等奖)/.test(value)) return { rank: '第一名', inferred: /一等奖/.test(value) };
@@ -178,7 +228,7 @@
     return practices;
   }
 
-  function parseCompetitions(text, isAcademic, warnings, evidence, field) {
+  function parseCompetitions(text, isAcademic, warnings, evidence, field, academicCompetitions) {
     const entries = splitEntries(text);
     const competitions = [];
     const innovations = [];
@@ -212,15 +262,21 @@
         if (entry) addWarning(warnings, field, '未完整识别奖项和级别，该条不计分', entry);
         return;
       }
+      const matchedAcademicName = findAcademicCompetition(entry, academicCompetitions);
+      if (isAcademic && !matchedAcademicName) {
+        addWarning(warnings, field, '未能在144项学科竞赛库中唯一匹配，该条不自动计分', entry);
+        return;
+      }
+      const effectiveAcademic = !!matchedAcademicName;
       competitions.push({
-        name: entry,
-        selectedName: '',
-        isManual: true,
+        name: matchedAcademicName || entry,
+        selectedName: matchedAcademicName || '',
+        isManual: !effectiveAcademic,
         level: levelInfo.level,
         award: award,
-        isAcademic: !!isAcademic
+        isAcademic: effectiveAcademic
       });
-      evidence.push((isAcademic ? '学科竞赛：' : '非学科竞赛：') + levelInfo.level + award);
+      evidence.push((effectiveAcademic ? '匹配144项学科竞赛：' + matchedAcademicName + '，' : '非学科竞赛：') + levelInfo.level + award);
     });
     return { competitions: competitions, innovations: innovations };
   }
@@ -300,7 +356,9 @@
 
   function formatDate(value, xlsx, warnings) {
     if (!value) return '';
-    if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return [value.getFullYear(), String(value.getMonth() + 1).padStart(2, '0'), String(value.getDate()).padStart(2, '0')].join('-');
+    }
     if (typeof value === 'number' && xlsx && xlsx.SSF && xlsx.SSF.parse_date_code) {
       const parsed = xlsx.SSF.parse_date_code(value);
       if (parsed) return [parsed.y, String(parsed.m).padStart(2, '0'), String(parsed.d).padStart(2, '0')].join('-');
@@ -373,7 +431,7 @@
     });
   }
 
-  function parseDevelopmentRow(row, sourceRow, headers, xlsx) {
+  function parseDevelopmentRow(row, sourceRow, headers, xlsx, options) {
     const warnings = [];
     const evidence = [];
     const index = {};
@@ -390,8 +448,9 @@
     // This form defines J as academic and K as non-academic under one merged header.
     const academicText = row[9] || '';
     const nonAcademicText = row[10] || '';
-    const academic = parseCompetitions(academicText, true, warnings, evidence, '学科竞赛');
-    const nonAcademic = parseCompetitions(nonAcademicText, false, warnings, evidence, '非学科竞赛');
+    const academicCompetitions = (options && options.academicCompetitions) || [];
+    const academic = parseCompetitions(academicText, true, warnings, evidence, '学科竞赛', academicCompetitions);
+    const nonAcademic = parseCompetitions(nonAcademicText, false, warnings, evidence, '非学科竞赛', academicCompetitions);
     const cet = parseCet(cell('cet'), warnings, evidence);
     const failRecent = Math.max(0, Math.trunc(parseNumber(cell('failRecent'))));
     const failTotal = Math.max(0, Math.trunc(parseNumber(cell('failTotal'))));
@@ -473,7 +532,7 @@
     };
   }
 
-  function parseWorkbook(workbook, xlsx) {
+  function parseWorkbook(workbook, xlsx, options) {
     if (!workbook || !xlsx || !xlsx.utils) throw new Error('工作簿解析器不可用');
     const found = findWorkbookSheet(workbook, xlsx);
     if (!found) throw new Error('未找到同时包含“姓名”和“班级”的人员数据表');
@@ -485,7 +544,7 @@
     for (let r = found.headerRow + 1; r < found.matrix.length; r++) {
       const row = found.matrix[r] || [];
       if (!row.some(function(cell) { return cleanText(cell) !== ''; })) continue;
-      rows.push(parseDevelopmentRow(row, r + 1, found.headers, xlsx));
+      rows.push(parseDevelopmentRow(row, r + 1, found.headers, xlsx, options || {}));
     }
     return { sheetName: found.sheetName, layout: found.layout, rows: rows };
   }
@@ -497,6 +556,7 @@
     splitEntries: splitEntries,
     inferLevel: inferLevel,
     detectAward: detectAward,
+    findAcademicCompetition: findAcademicCompetition,
     findWorkbookSheet: findWorkbookSheet,
     parseWorkbook: parseWorkbook
   };
