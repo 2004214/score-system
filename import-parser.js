@@ -48,8 +48,9 @@
     const text = cleanText(value).replace(/\r\n?/g, '\n');
     if (!text) return [];
     return text
-      .replace(/\s{2,}(?=20\d{2}年?)/g, '\n')
-      .split(/\n+|[；;]+|(?=20\d{2}年?)/)
+      .replace(/[ \t]{3,}(?=(?:\d+[.、]\s*)?20\d{2}年?)/g, '\n')
+      .replace(/([、，])(?=(?:\d+[.、]\s*)?20\d{2}年?)/g, '\n')
+      .split(/\n+|[；;]+|(?=\s*\d+[.、]\s*20\d{2}年?)/)
       .map(function(item) { return cleanText(item).replace(/^[、,，。\s]+|[、,，。\s]+$/g, ''); })
       .filter(Boolean);
   }
@@ -113,6 +114,46 @@
       .replace(/\s+/g, '');
   }
 
+  function normalizeScoringItemName(value) {
+    return normalizeCompetitionName(value)
+      .replace(/国家级|省部级|省级|兵团级|自治区级|校级|院校级|院级/g, '')
+      .replace(/特等奖|一等奖|二等奖|三等奖|优秀奖|第一名|第二名|第三名|冠军|亚军|季军|参加过|成功参赛/g, '');
+  }
+
+  function getNamedItemPriority(item) {
+    const levelPriority = { '院级': 1, '校级': 2, '省级': 3, '省部级': 3, '国家级': 4 };
+    const resultPriority = {
+      '参加过': 1, '优秀奖': 2, '第三名': 3, '三等奖': 3,
+      '第二名': 4, '二等奖': 4, '第一名': 5, '一等奖': 5, '特等奖': 6
+    };
+    return (levelPriority[item && item.level] || 0) * 100 + (resultPriority[item && (item.award || item.rank)] || 0);
+  }
+
+  function keepUniqueNamedItems(items, seen, warnings, field) {
+    const bestByKey = new Map();
+    (items || []).forEach(function(item) {
+      const key = normalizeScoringItemName(item && item.name);
+      if (!key) return;
+      if (seen.has(key)) {
+        addWarning(warnings, field, '与已识别项目重复，仅保留一处计分', item.name);
+        return;
+      }
+      const current = bestByKey.get(key);
+      if (!current) {
+        bestByKey.set(key, item);
+        return;
+      }
+      if (getNamedItemPriority(item) > getNamedItemPriority(current)) {
+        addWarning(warnings, field, '同一项目有多个奖项，仅保留较高奖项计分', current.name);
+        bestByKey.set(key, item);
+      } else {
+        addWarning(warnings, field, '同一项目有多个奖项，仅保留较高奖项计分', item.name);
+      }
+    });
+    bestByKey.forEach(function(_, key) { seen.add(key); });
+    return Array.from(bestByKey.values());
+  }
+
   function getCompetitionCoreName(value) {
     return normalizeCompetitionName(value)
       .replace(/全国|中国|国际|高校|高等学校|大学生|本科院校|职业院校|院校|学校/g, '')
@@ -123,6 +164,31 @@
     const input = normalizeCompetitionName(value);
     const inputCore = getCompetitionCoreName(value);
     if (!input || !Array.isArray(competitions) || !competitions.length) return null;
+
+    const familyAliases = [
+      { input: /挑战杯.*课外学术科技作品/, official: /挑战杯.*课外学术科技作品/ },
+      { input: /挑战杯.*创业计划/, official: /挑战杯.*创业计划/ },
+      { input: /第十五届挑战杯/, official: /挑战杯.*创业计划/ },
+      { input: /(?:中国国际)?大学生创新大赛|互联网\+.*创新创业/, official: /中国国际大学生创新大赛/ },
+      { input: /三维数字化创新(?:设计)?/, official: /全国三维数字化创新设计大赛/ },
+      { input: /物理实验竞赛/, official: /全国大学生物理实验竞赛/ },
+      { input: /(?:国际大学生智能农装|智能农业装备创新)/, official: /国际大学生智能农业装备创新大赛/ },
+      { input: /(?:机械工程创新创意|过程装备实践与创新)/, official: /中国大学生机械工程创新创意大赛/ },
+      { input: /智慧农业与智能装备/, official: /塔里木大学.*智慧农业与智能装备.*创新设计大赛/ },
+      { input: /西门子杯|CIMC/, official: /西门子杯.*智能制造挑战赛/ },
+      { input: /机器人及人工智能/, official: /中国机器人及人工智能大赛/ },
+      { input: /大学生计算机设计/, official: /中国大学生计算机设计大赛/ },
+      { input: /节能减排社会实践与科技竞赛/, official: /全国大学生节能减排社会实践与科技竞赛/ },
+      { input: /学创杯.*创业综合模拟/, official: /学创杯.*创业综合模拟/ },
+      { input: /大学生电子设计竞赛/, official: /全国大学生电子设计竞赛/ },
+      { input: /大学生物理学术竞赛/, official: /中国大学生物理学术竞赛/ }
+    ];
+    for (let i = 0; i < familyAliases.length; i++) {
+      const alias = familyAliases[i];
+      if (!alias.input.test(input)) continue;
+      const matches = competitions.filter(function(name) { return alias.official.test(normalizeCompetitionName(name)); });
+      if (matches.length === 1) return matches[0];
+    }
 
     const ranked = competitions.map(function(name) {
       const normalized = normalizeCompetitionName(name);
@@ -201,8 +267,9 @@
       addWarning(warnings, '职务', '有职务描述，但未匹配到可计数的职务关键词', value);
       return 0;
     }
-    evidence.push('职务关键词：' + roles.join('、'));
-    return roles.length;
+    const countedRoles = Math.min(roles.length, 3);
+    evidence.push('职务关键词：' + roles.join('、') + (roles.length > 3 ? '（按最多3个计分）' : ''));
+    return countedRoles;
   }
 
   function parsePractice(text, warnings, evidence) {
@@ -210,7 +277,7 @@
     const practices = [];
     entries.forEach(function(entry) {
       const levelInfo = inferLevel(entry);
-      const award = detectAward(entry);
+      const award = detectAward(entry) || (/优秀(?:团队|个人)/.test(entry) ? '优秀' : '');
       if (levelInfo.conflict) addWarning(warnings, '社会实践', levelInfo.reason + '，该条不自动计分', entry);
       if (levelInfo.inferred) {
         addWarning(warnings, '社会实践', '按' + levelInfo.reason + '推断为' + levelInfo.level, entry);
@@ -284,11 +351,18 @@
   function parseCulture(text, warnings, evidence) {
     const entries = splitEntries(text);
     const competitions = [];
-    let excellent = 0;
+    const honors = [];
     entries.forEach(function(entry) {
-      if (/优秀(?:演员|运动员|工作者|组织者|个人)/.test(entry)) {
-        excellent += countMatches(entry, /优秀(?:演员|运动员|工作者|组织者|个人)/g);
-        evidence.push('文体优秀个人：' + entry);
+      if (/优秀(?!奖)/.test(entry)) {
+        const honorLevel = inferLevel(entry);
+        if (honorLevel.level === '校级' || honorLevel.level === '院级') {
+          honors.push({ name: entry, level: honorLevel.level, count: 1 });
+          evidence.push('文体荣誉：' + entry + '[' + honorLevel.level + ']，仅计分1次');
+          if (honorLevel.inferred) addWarning(warnings, '文体活动', '按' + honorLevel.reason + '推断荣誉级别', entry);
+        } else {
+          addWarning(warnings, '文体活动', '识别到优秀荣誉，但缺少校级或院级信息，仅保留原文不计分', entry);
+        }
+        return;
       }
       const levelInfo = inferLevel(entry);
       const rankInfo = detectCultureRank(entry);
@@ -308,17 +382,23 @@
       competitions.push({ name: entry, level: mapBlock1Level(levelInfo.level), rank: rankInfo.rank });
       evidence.push('文体活动：' + mapBlock1Level(levelInfo.level) + rankInfo.rank);
     });
-    return { competitions: competitions, excellent: excellent };
+    return { competitions: competitions, honors: honors };
   }
 
-  function parseVolunteerHonors(text, practices, warnings, evidence) {
+  function parseVolunteerHonors(text, warnings, evidence) {
     const entries = splitEntries(text);
-    const result = { excellentStudent: 0, excellentCadre: 0, excellentLeague: 0 };
+    const result = { excellentStudent: 0, excellentCadre: 0, excellentLeague: 0, honors: [] };
     entries.forEach(function(entry) {
       if (/优秀学生干部/.test(entry)) result.excellentCadre += countMatches(entry, /优秀学生干部/g);
       else if (/优秀学生(?!干部)/.test(entry)) result.excellentStudent += countMatches(entry, /优秀学生(?!干部)/g);
       if (/优秀共青团员/.test(entry)) result.excellentLeague += countMatches(entry, /优秀共青团员/g);
-      if (/优秀志愿者|星级志愿者/.test(entry)) practices.push({ desc: entry });
+      let type = '';
+      if (/优秀志愿者/.test(entry)) type = '优秀志愿者';
+      else if (/星级志愿者/.test(entry)) type = '星级志愿者';
+      result.honors.push({ name: entry, type: type });
+      if (!type && !/优秀学生|优秀共青团员/.test(entry)) {
+        addWarning(warnings, '志愿荣誉', '评分规则未定义该志愿荣誉，已保留完整名称但不自动加分', entry);
+      }
       if (/优秀共青团干部/.test(entry)) addWarning(warnings, '志愿荣誉', '评分规则未定义“优秀共青团干部”，已保留原文但不自动加分', entry);
     });
     if (result.excellentStudent) evidence.push('优秀学生' + result.excellentStudent + '次');
@@ -441,7 +521,7 @@
     function cell(key) { return index[key] >= 0 ? row[index[key]] : ''; }
 
     const practices = parsePractice(cell('practice'), warnings, evidence);
-    const volunteerHonors = parseVolunteerHonors(cell('volunteerHonor'), practices, warnings, evidence);
+    const volunteerHonors = parseVolunteerHonors(cell('volunteerHonor'), warnings, evidence);
     const hours = parseVolunteerHours(cell('volunteerHours'), warnings, evidence);
     const culture = parseCulture(cell('culture'), warnings, evidence);
 
@@ -458,6 +538,10 @@
     const positionText = cleanText(cell('position'));
     const name = cleanText(cell('name'));
     const className = cleanText(cell('className'));
+    const seenScoringItems = new Set();
+    const b5Competitions = keepUniqueNamedItems(academic.competitions.concat(nonAcademic.competitions), seenScoringItems, warnings, '竞赛');
+    const b1Competitions = keepUniqueNamedItems(culture.competitions, seenScoringItems, warnings, '文体活动');
+    const b1Honors = keepUniqueNamedItems(culture.honors, seenScoringItems, warnings, '文体荣誉');
 
     const record = {
       name: name,
@@ -473,24 +557,36 @@
       cet: cleanText(cell('cet')),
       rank: cleanText(cell('rank')),
       remark: cleanText(cell('remark')),
-      b1: { noViolation: false, club: 0, excellent: culture.excellent, competitions: culture.competitions, publications: [] },
+      b1: { noViolation: false, club: 0, competitions: b1Competitions, publications: [], honors: b1Honors, customCompetitions: [] },
       b2: {
-        volHours: hours.total,
-        volHoursRecent: hours.recent,
         sanxia: countMatches(practiceText, /三下乡/g),
         fanjia: countMatches(practiceText, /返家乡/g),
         practices: practices,
-        competitions: []
+        competitions: [],
+        honors: [],
+        customCompetitions: []
       },
       b3: {
+        volHours: hours.total,
+        volHoursRecent: hours.recent,
+        commendation: 0,
+        branchActivity: 0,
+        volunteerHonors: volunteerHonors.honors,
+        volCompetitions: [],
+        honors: [],
+        customCompetitions: []
+      },
+      b4: {
         cadre: parseCadre(positionText, warnings, evidence),
         positionDesc: positionText,
         excellentStudent: volunteerHonors.excellentStudent,
         excellentCadre: volunteerHonors.excellentCadre,
-        excellentLeague: volunteerHonors.excellentLeague
+        excellentLeague: volunteerHonors.excellentLeague,
+        honors: [],
+        customCompetitions: []
       },
-      b4: {
-        competitions: academic.competitions.concat(nonAcademic.competitions),
+      b5: {
+        competitions: b5Competitions,
         innovations: academic.innovations.concat(nonAcademic.innovations),
         academicWorks: [],
         academicPapers: [],
@@ -499,11 +595,13 @@
         cet4: cet.cet4,
         cet6: cet.cet6
       },
-      b5: {
+      b6: {
         avg: 70,
         fails: Array.from({ length: failRecent }, function(_, i) {
           return { name: '未提供课程名' + (i + 1), type: 'fail' };
-        })
+        }),
+        honors: [],
+        customCompetitions: []
       },
       sourceDetails: {
         practice: practiceText,

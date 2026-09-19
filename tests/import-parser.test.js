@@ -66,6 +66,10 @@ test('splits multiline and adjacent-year narrative entries', () => {
     parser.splitEntries('2024年第一项\n2025年第二项；2026年第三项'),
     ['2024年第一项', '2025年第二项', '2026年第三项']
   );
+  assert.deepEqual(
+    parser.splitEntries('2024年第一项获奖          2025年第二项获奖、2026年第三项获奖'),
+    ['2024年第一项获奖', '2025年第二项获奖', '2026年第三项获奖']
+  );
 });
 
 test('prefers explicit levels and infers organizer levels', () => {
@@ -82,6 +86,12 @@ test('matches every official academic competition to its canonical library name'
     assert.equal(parser.findAcademicCompetition(name + ' 校级二等奖', competitions), name);
   });
   assert.equal(parser.findAcademicCompetition('完全不在目录中的匿名项目校级一等奖', competitions), null);
+  assert.equal(parser.findAcademicCompetition('2025大学生创新大赛校级三等奖', competitions), '中国国际大学生创新大赛（2025）');
+  assert.equal(parser.findAcademicCompetition('十五届挑战杯兵团大学生创业计划三等奖', competitions), '“挑战杯”中国大学生创业计划大赛');
+  assert.equal(parser.findAcademicCompetition('塔里木大学第十五届挑战杯院级三等奖', competitions), '“挑战杯”中国大学生创业计划大赛');
+  assert.equal(parser.findAcademicCompetition('塔里木大学第五届智慧农业与智能装备校级二等奖', competitions), '塔里木大学“智慧农业与智能装备”创新设计大赛');
+  assert.equal(parser.findAcademicCompetition('2024-12 全国三维数字化创新大赛国家级二等奖', competitions), '全国三维数字化创新设计大赛');
+  assert.equal(parser.findAcademicCompetition('2025-08 全国大学生物理实验竞赛西北赛区优秀奖', competitions), '全国大学生物理实验竞赛（创新）');
 });
 
 test('keeps conflicting competition levels unscored with a warning', () => {
@@ -113,6 +123,11 @@ test('parses merged J/K competition columns and narrative scoring inputs', () =>
   assert.equal(first.record.b2.volHours, 120.5);
   assert.equal(first.record.b2.volHoursRecent, 75.5);
   assert.equal(first.record.b2.sanxia, 1);
+  assert.equal(first.record.b2.practices.length, 1);
+  assert.deepEqual(first.record.b2.volunteerHonors.map(item => item.name), [
+    '塔里木大学优秀学生干部',
+    '校级优秀志愿者'
+  ]);
   assert.ok(first.record.b3.cadre >= 2);
   assert.equal(first.record.b3.excellentCadre, 1);
   assert.equal(first.record.b4.cet4, true);
@@ -123,7 +138,85 @@ test('parses merged J/K competition columns and narrative scoring inputs', () =>
   assert.equal(first.record.b4.competitions[0].isManual, false);
   assert.equal(first.record.b4.competitions[1].isAcademic, false);
   assert.equal(first.record.b1.competitions[0].rank, '第二名');
-  assert.equal(first.record.b1.excellent, 1);
+  assert.equal(first.record.b1.excellent, undefined);
+  assert.deepEqual(first.record.b1.honors, [
+    { name: '校运会优秀运动员', level: '校级', count: 1 }
+  ]);
+});
+
+test('keeps a full excellent activity name and scores it only as one honor', () => {
+  const wb = createDevelopmentWorkbook();
+  const ws = wb.Sheets['情况了解'];
+  ws.N2.v = '塔里木大学校运会优秀运动员一等奖';
+  ws.N2.w = '塔里木大学校运会优秀运动员一等奖';
+
+  const first = parseWorkbook(wb).rows[0];
+  assert.equal(first.record.b1.competitions.length, 0);
+  assert.deepEqual(first.record.b1.honors, [
+    { name: '塔里木大学校运会优秀运动员一等奖', level: '校级', count: 1 }
+  ]);
+});
+
+test('keeps an official competition only once when repeated across J and K', () => {
+  const wb = createDevelopmentWorkbook();
+  const ws = wb.Sheets['情况了解'];
+  ws.K2.v = 'CIMC“西门子杯”中国智能制造挑战赛校级二等奖';
+  ws.K2.w = 'CIMC“西门子杯”中国智能制造挑战赛校级二等奖';
+
+  const first = parseWorkbook(wb).rows[0];
+  const matches = first.record.b4.competitions.filter(item => item.name === 'CIMC“西门子杯”中国智能制造挑战赛');
+  assert.equal(matches.length, 1);
+  assert.ok(first.warnings.some(item => /重复|同一项目/.test(item.message)));
+});
+
+test('keeps every named practice award and all thirteen excellent culture entries', () => {
+  const wb = createDevelopmentWorkbook();
+  const ws = wb.Sheets['情况了解'];
+  ws.I2.v = [
+    '塔里木大学机械电气化工程学院2024年暑假“三下乡”社会实践活动 院级优秀团队/优秀个人',
+    '塔里木大学纺织服装学院2025年寒假“返家乡”社会实践活动 院级一等奖',
+    '塔里木大学机械电气化工程学院2026年暑假“三下乡”社会实践活动 院级三等奖'
+  ].join('\n');
+  ws.I2.w = ws.I2.v;
+  ws.L2.v = '';
+  ws.L2.w = '';
+  ws.N2.v = Array.from({ length: 13 }, function(_, index) {
+    const title = index === 5 ? '优秀筹备工作者' : '优秀工作者';
+    return (2023 + index) + '年机械电气化工程学院匿名文体活动' + (index + 1) + ' ' + title;
+  }).join('\n');
+  ws.N2.w = ws.N2.v;
+
+  const first = parseWorkbook(wb).rows[0];
+  assert.equal(first.record.b2.practices.length, 3);
+  assert.deepEqual(first.record.b2.practices.map(item => item.award), ['优秀', '一等奖', '三等奖']);
+  assert.ok(first.record.b2.practices.every(item => item.name && !item.desc));
+  assert.equal(first.record.b1.honors.length, 13);
+  assert.ok(first.record.b1.honors.some(item => /优秀筹备工作者/.test(item.name)));
+});
+
+test('keeps the higher award when the same competition appears more than once', () => {
+  const wb = createDevelopmentWorkbook();
+  const ws = wb.Sheets['情况了解'];
+  ws.J2.v = '全国大学生电子设计竞赛校级三等奖';
+  ws.J2.w = ws.J2.v;
+  ws.K2.v = '全国大学生电子设计竞赛校级二等奖';
+  ws.K2.w = ws.K2.v;
+
+  const first = parseWorkbook(wb).rows[0];
+  const matches = first.record.b4.competitions.filter(item => item.name === '全国大学生电子设计竞赛');
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].award, '二等奖');
+});
+
+test('caps imported cadre count at three roles', () => {
+  const wb = createDevelopmentWorkbook();
+  const ws = wb.Sheets['情况了解'];
+  ws.H2.v = '班长、团支书、委员、干事';
+  ws.H2.w = '班长、团支书、委员、干事';
+
+  const first = parseWorkbook(wb).rows[0];
+  assert.equal(first.record.b3.cadre, 3);
+  assert.ok(first.evidence.some(item => /最多3个/.test(item)));
 });
 
 test('marks inferred levels and numeric CET4 assumptions as warnings', () => {

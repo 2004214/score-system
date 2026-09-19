@@ -6,12 +6,13 @@
 <title>综合素质评分系统</title>
 <link rel="stylesheet" href="lib/bootstrap.min.css">
 <style>
-:root{--primary:#2563eb;--success:#16a34a;--danger:#dc2626;--warning:#d97706;}
-body{background:#f1f5f9;font-size:14px;}
+:root{--primary:#2563eb;--primary-dark:#1e40af;--success:#16a34a;--danger:#dc2626;--warning:#d97706;--surface:#fff;--border:#dbe5f1;--muted:#64748b;}
+html{scroll-behavior:smooth;}
+body{background:#f1f5f9;font-size:14px;overflow-x:hidden;-webkit-font-smoothing:antialiased;}
 .navbar{background:linear-gradient(135deg,#1e40af,#3b82f6)!important;}
 .navbar-brand{font-weight:700;font-size:1.2rem;letter-spacing:.5px;}
-.card{border:none;box-shadow:0 1px 4px rgba(0,0,0,.1);border-radius:10px;}
-.card-header{border-radius:10px 10px 0 0!important;font-weight:600;}
+.card{border:none;box-shadow:0 1px 4px rgba(15,23,42,.1);border-radius:8px;}
+.card-header{border-radius:8px 8px 0 0!important;font-weight:600;}
 .section-card .card-header{background:linear-gradient(90deg,#eff6ff,#dbeafe);color:#1e40af;border-bottom:2px solid #bfdbfe;}
 .score-badge{background:#dcfce7;color:#166534;font-weight:700;padding:2px 8px;border-radius:20px;font-size:.85rem;}
 .total-badge{background:#fef3c7;color:#92400e;font-weight:700;padding:3px 10px;border-radius:20px;}
@@ -42,12 +43,70 @@ body{background:#f1f5f9;font-size:14px;}
 .import-preview-table td:last-child{min-width:280px;max-width:420px;white-space:normal;overflow-wrap:anywhere;}
 .import-preview-table details summary{cursor:pointer;font-weight:600;color:#334155;}
 .import-preview-table details ul{margin-top:6px;}
+.entry-layout{display:grid;grid-template-columns:184px minmax(0,1fr) 286px;gap:16px;align-items:start;}
+.entry-nav,.score-preview-shell{position:sticky;top:76px;}
+.entry-nav{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;box-shadow:0 1px 4px rgba(15,23,42,.07);}
+.entry-nav-title{padding:8px 10px 10px;color:#475569;font-size:12px;font-weight:700;border-bottom:1px solid #e2e8f0;margin-bottom:6px;}
+.entry-nav-list{display:flex;flex-direction:column;gap:3px;}
+.entry-nav-link{width:100%;min-height:40px;border:0;background:transparent;color:#475569;text-align:left;padding:8px 10px;border-radius:6px;font-weight:600;display:flex;align-items:center;gap:9px;cursor:pointer;transition:background-color .15s ease,color .15s ease,box-shadow .15s ease;}
+.entry-nav-link:hover{background:#eff6ff;color:var(--primary-dark);}
+.entry-nav-link:focus-visible{outline:3px solid rgba(37,99,235,.28);outline-offset:2px;}
+.entry-nav-link.active{background:#dbeafe;color:var(--primary-dark);box-shadow:inset 3px 0 0 var(--primary);}
+.entry-nav-index{width:24px;height:24px;border-radius:50%;background:#eef2f7;color:#64748b;display:inline-grid;place-items:center;font-size:11px;font-variant-numeric:tabular-nums;flex:0 0 auto;}
+.entry-nav-link.active .entry-nav-index{background:var(--primary);color:#fff;}
+.entry-form{min-width:0;scroll-behavior:smooth;scrollbar-gutter:stable;}
+.form-section{scroll-margin-top:16px;}
+.score-preview-shell .card{border:1px solid #fde68a;overflow:hidden;}
+.score-preview-shell td:last-child,.score-badge,#previewTotal{font-variant-numeric:tabular-nums;}
+.extension-panel{border-top:1px solid #e2e8f0;margin-top:16px;padding-top:14px;}
+.extension-panel-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;}
+.extension-panel-title strong{color:#334155;font-size:13px;}
+.enhancement-list:empty::before{content:'暂无记录';display:block;color:#94a3b8;font-size:12px;padding:8px 0;}
+.enhancement-row{display:grid;grid-template-columns:minmax(140px,1.7fr) minmax(90px,.8fr) minmax(84px,.7fr) 74px 36px;gap:8px;align-items:end;background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:9px;margin-bottom:8px;}
+.enhancement-row.honor-row{grid-template-columns:minmax(180px,2fr) minmax(90px,.8fr) 74px 36px;}
+.enhancement-row.custom-competition-row{grid-template-columns:minmax(160px,1.8fr) minmax(100px,.9fr) minmax(90px,.7fr) 74px 36px;}
+.enhancement-field label{display:block;color:#64748b;font-size:11px;margin-bottom:3px;}
+.enhancement-subtotal{min-height:31px;display:flex;align-items:center;justify-content:flex-end;color:#166534;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.enhancement-remove{width:32px;height:32px;padding:0;align-self:end;}
+.duplicate-scoring-warning{grid-column:1/-1;color:#b91c1c;font-size:12px;font-weight:600;margin-top:4px;}
+.section-card{overflow:visible;}
+@media(min-width:1200px){
+  .entry-form{max-height:calc(100vh - 128px);overflow-y:auto;padding-right:5px;}
+  .entry-nav,.score-preview-shell{top:76px;}
+}
+@media(max-width:1199.98px){
+  .entry-layout{grid-template-columns:1fr 270px;}
+  .entry-nav{grid-column:1/-1;position:sticky;top:55px;z-index:100;overflow-x:auto;padding:6px;}
+  .entry-nav-title{display:none;}
+  .entry-nav-list{flex-direction:row;min-width:max-content;}
+  .entry-nav-link{width:auto;white-space:nowrap;}
+  .entry-nav-link.active{box-shadow:inset 0 -3px 0 var(--primary);}
+  .form-section{scroll-margin-top:120px;}
+}
+@media(max-width:767.98px){
+  .navbar{flex-wrap:nowrap;gap:8px;padding-left:8px!important;padding-right:8px!important;}
+  .navbar-brand{font-size:1rem;white-space:nowrap;margin-right:0;}
+  .navbar>div{min-width:0;flex:1;overflow-x:auto;justify-content:flex-end;padding-bottom:2px;}
+  .navbar>div>*{flex:0 0 auto;}
+  .entry-layout{display:block;}
+  .entry-nav{margin-bottom:12px;}
+  .score-preview-shell{position:static;margin-top:12px;}
+  .enhancement-row,.enhancement-row.honor-row,.enhancement-row.custom-competition-row{grid-template-columns:1fr 1fr;}
+  .enhancement-field:first-child{grid-column:1/-1;}
+  .enhancement-subtotal{justify-content:flex-start;}
+}
 @media(max-width:576px){
   #importModal .modal-dialog{margin:.5rem;max-width:calc(100% - 1rem);}
   #importModal .modal-body{padding:.75rem;}
   #importModal .modal-footer{align-items:flex-start;}
   #importCount{width:100%;margin-bottom:.5rem;}
+  .container-fluid{padding-left:8px;padding-right:8px;}
+  .entry-nav-link{min-height:44px;}
+  .enhancement-row,.enhancement-row.honor-row,.enhancement-row.custom-competition-row{grid-template-columns:1fr;}
+  .enhancement-field:first-child{grid-column:auto;}
+  .enhancement-remove{width:40px;height:40px;}
 }
+@media(prefers-reduced-motion:reduce){html,.entry-form{scroll-behavior:auto;}.entry-nav-link{transition:none;}}
 </style>
 </head>
 <body>
@@ -105,12 +164,23 @@ body{background:#f1f5f9;font-size:14px;}
 
   <!-- 录入面板 -->
   <div id="tabInput">
-    <div class="row g-3">
-      <!-- 左侧：表单 -->
-      <div class="col-lg-8">
+    <div class="entry-layout">
+      <aside class="entry-nav" aria-label="评分表单导航">
+        <div class="entry-nav-title">评分板块</div>
+        <div class="entry-nav-list">
+          <button type="button" class="entry-nav-link active" data-section="section-basic" onclick="scrollToFormSection('section-basic',this)"><span class="entry-nav-index">01</span>基本信息</button>
+          <button type="button" class="entry-nav-link" data-section="section-b1" onclick="scrollToFormSection('section-b1',this)"><span class="entry-nav-index">02</span>文体模块</button>
+          <button type="button" class="entry-nav-link" data-section="section-b2" onclick="scrollToFormSection('section-b2',this)"><span class="entry-nav-index">03</span>社会实践</button>
+          <button type="button" class="entry-nav-link" data-section="section-b3" onclick="scrollToFormSection('section-b3',this)"><span class="entry-nav-index">04</span>志愿服务</button>
+          <button type="button" class="entry-nav-link" data-section="section-b4" onclick="scrollToFormSection('section-b4',this)"><span class="entry-nav-index">05</span>社会工作</button>
+          <button type="button" class="entry-nav-link" data-section="section-b5" onclick="scrollToFormSection('section-b5',this)"><span class="entry-nav-index">06</span>学科竞赛</button>
+          <button type="button" class="entry-nav-link" data-section="section-b6" onclick="scrollToFormSection('section-b6',this)"><span class="entry-nav-index">07</span>学业成绩</button>
+        </div>
+      </aside>
+      <main class="entry-form" id="scoreFormScroll">
 
         <!-- 基本信息 -->
-        <div class="card section-card mb-3">
+        <div class="card section-card form-section mb-3" id="section-basic">
           <div class="card-header">📋 基本信息</div>
           <div class="card-body">
             <div class="row g-2">
@@ -129,7 +199,6 @@ body{background:#f1f5f9;font-size:14px;}
                 <textarea id="f_remark" class="form-control form-control-sm" rows="2" placeholder="可记录国奖/国励、四六级、计算机等级考试、清零依据说明等"></textarea>
               </div>
             </div>
-            <!-- 附加信息：仅存储，不在界面显示，导出时体现 -->
             <input type="hidden" id="f_failRecent" value="0">
             <input type="hidden" id="f_failTotal" value="0">
             <input type="hidden" id="f_cet" value="">
@@ -137,15 +206,15 @@ body{background:#f1f5f9;font-size:14px;}
           </div>
         </div>
 
-        <!-- 板块一 -->
-        <div class="card section-card mb-3">
+        <!-- 板块一：文体模块 -->
+        <div class="card section-card form-section mb-3" id="section-b1">
           <div class="card-header d-flex justify-content-between align-items-center">
             <span>🏆 板块一：文体模块（素质拓展与全面发展）</span>
             <span class="score-badge" id="score1">0分</span>
           </div>
           <div class="card-body">
             <div class="alert alert-info py-2 small mb-2">
-              文体模块：参加校内文化、艺术、体育团体或注册社团活动按 1 分/季度计；文体竞赛按院级/校级/省部级/国家级前三名计分；获得校级优秀个人每次 +3 分。
+              文体模块：参加校内文化、艺术、体育团体或注册社团活动按 1 分/季度计；文体竞赛按院级/校级/省部级/国家级前三名计分；优秀个人请在"荣誉记录"中填写完整活动名称。
             </div>
             <div class="row g-2 mb-2">
               <div class="col-12">
@@ -158,13 +227,9 @@ body{background:#f1f5f9;font-size:14px;}
               </div>
             </div>
             <div class="row g-2 mb-2">
-              <div class="col-md-4">
+              <div class="col-md-6">
                 <label class="form-label">文体团体/社团活动参与季度数</label>
                 <input type="number" id="b1_club" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock1()">
-              </div>
-              <div class="col-md-4">
-                <label class="form-label">校级优秀个人次数</label>
-                <input type="number" id="b1_excellent" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock1()">
               </div>
             </div>
             <label class="form-label fw-semibold">文体活动/竞赛获奖记录</label>
@@ -175,87 +240,137 @@ body{background:#f1f5f9;font-size:14px;}
             <label class="form-label fw-semibold">公开刊物/媒体作品发表</label>
             <div id="b1_publications"></div>
             <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB1Publication()">+ 添加作品发表</button>
+            <div class="extension-panel">
+              <div class="extension-panel-title"><strong>荣誉记录</strong><span class="small text-muted">每个具体荣誉只计一次：校级 3 分，院级 2 分</span></div>
+              <div id="b1_honors" class="enhancement-list"></div>
+              <button type="button" class="btn btn-sm btn-outline-primary btn-add" onclick="addHonorRecord('b1')">+ 添加荣誉</button>
+            </div>
+            <div class="extension-panel">
+              <div class="extension-panel-title"><strong>自定义比赛项目</strong><span class="small text-muted">按填写分值累计</span></div>
+              <div id="b1_customCompetitions" class="enhancement-list"></div>
+              <button type="button" class="btn btn-sm btn-outline-primary btn-add" onclick="addCustomCompetition('b1')">+ 添加比赛项目</button>
+            </div>
           </div>
         </div>
 
-        <!-- 板块二 -->
-        <div class="card section-card mb-3">
+        <!-- 板块二：社会实践 -->
+        <div class="card section-card form-section mb-3" id="section-b2">
           <div class="card-header d-flex justify-content-between align-items-center">
-            <span>🌱 板块二：社会实践和志愿服务</span>
+            <span>🌱 板块二：社会实践</span>
             <span class="score-badge" id="score2">0分</span>
           </div>
           <div class="card-body">
+            <div class="alert alert-info py-2 small mb-2">社会实践：每年必须参加一次社会实践活动或志愿者服务活动。三下乡+3分/次，返家乡+2分/次；实践评优和竞赛按级别计分。</div>
             <div class="row g-2 mb-2">
-              <div class="col-md-3"><label class="form-label">志愿汇总时长（小时）</label><input type="number" id="b2_volHours" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock2()"></div>
-              <div class="col-md-3"><label class="form-label">近一年志愿时长（小时）</label><input type="number" id="b2_volHoursRecent" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock2()"></div>
               <div class="col-md-3"><label class="form-label">"三下乡"次数</label><input type="number" id="b2_sanxia" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock2()"></div>
               <div class="col-md-3"><label class="form-label">"返家乡"次数</label><input type="number" id="b2_fanjia" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock2()"></div>
             </div>
-            <div class="row g-2 mb-2">
-              <div class="col-md-3"><label class="form-label">校院通报表扬次数</label><input type="number" id="b2_commendation" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock2()"></div>
-              <div class="col-md-3"><label class="form-label">支部活动参与次数</label><input type="number" id="b2_branchActivity" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock2()"></div>
-            </div>
-            <div class="alert alert-info py-2 small mb-2">社会实践获奖、优秀志愿者、星级志愿者等信息，请直接在下方“社会实践获奖记录”中填写，系统自动按最高奖和荣誉识别计分。</div>
             <label class="form-label fw-semibold">社会实践获奖记录</label>
             <div id="b2_practices"></div>
             <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB2Practice()">+ 添加社会实践获奖</button>
 
             <hr class="my-3">
-            <label class="form-label fw-semibold">社会实践成果/志愿项目竞赛获奖</label>
+            <label class="form-label fw-semibold">社会实践成果/竞赛获奖</label>
             <div id="b2_competitions"></div>
             <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB2Competition()">+ 添加社会实践类竞赛</button>
+            <div class="extension-panel">
+              <div class="extension-panel-title"><strong>荣誉记录</strong><span class="small text-muted">每个具体荣誉只计一次：校级 3 分，院级 2 分</span></div>
+              <div id="b2_honors" class="enhancement-list"></div>
+              <button type="button" class="btn btn-sm btn-outline-primary btn-add" onclick="addHonorRecord('b2')">+ 添加荣誉</button>
+            </div>
+            <div class="extension-panel">
+              <div class="extension-panel-title"><strong>自定义比赛项目</strong><span class="small text-muted">按填写分值累计</span></div>
+              <div id="b2_customCompetitions" class="enhancement-list"></div>
+              <button type="button" class="btn btn-sm btn-outline-primary btn-add" onclick="addCustomCompetition('b2')">+ 添加比赛项目</button>
+            </div>
           </div>
         </div>
 
-        <!-- 板块三 -->
-        <div class="card section-card mb-3">
+        <!-- 板块三：志愿服务 -->
+        <div class="card section-card form-section mb-3" id="section-b3">
           <div class="card-header d-flex justify-content-between align-items-center">
-            <span>👔 板块三：社会工作与党员义务</span>
+            <span>🤝 板块三：志愿服务</span>
             <span class="score-badge" id="score3">0分</span>
+          </div>
+          <div class="card-body">
+            <div class="alert alert-info py-2 small mb-2">志愿服务：志愿时长以60小时为基准线，每超过5小时加1分，少的不扣分，最高加10分。优秀志愿者、星级志愿者各加2分。</div>
+            <div class="row g-2 mb-2">
+              <div class="col-md-3"><label class="form-label">志愿汇总时长（小时）</label><input type="number" id="b3_volHours" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()"></div>
+              <div class="col-md-3"><label class="form-label">近一年志愿时长（小时）</label><input type="number" id="b3_volHoursRecent" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()"></div>
+              <div class="col-md-3"><label class="form-label">校院通报表扬次数</label><input type="number" id="b3_commendation" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()"></div>
+              <div class="col-md-3"><label class="form-label">支部活动参与次数</label><input type="number" id="b3_branchActivity" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()"></div>
+            </div>
+            <label class="form-label fw-semibold">志愿活动及荣誉记录</label>
+            <div id="b3_volunteerHonors"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB3VolunteerHonor()">+ 添加志愿荣誉</button>
+
+            <hr class="my-3">
+            <label class="form-label fw-semibold">志愿服务类竞赛获奖</label>
+            <div id="b3_volCompetitions"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB3VolCompetition()">+ 添加志愿服务类竞赛</button>
+            <div class="extension-panel">
+              <div class="extension-panel-title"><strong>荣誉记录</strong><span class="small text-muted">每个具体荣誉只计一次：校级 3 分，院级 2 分</span></div>
+              <div id="b3_honors" class="enhancement-list"></div>
+              <button type="button" class="btn btn-sm btn-outline-primary btn-add" onclick="addHonorRecord('b3')">+ 添加荣誉</button>
+            </div>
+            <div class="extension-panel">
+              <div class="extension-panel-title"><strong>自定义比赛项目</strong><span class="small text-muted">按填写分值累计</span></div>
+              <div id="b3_customCompetitions" class="enhancement-list"></div>
+              <button type="button" class="btn btn-sm btn-outline-primary btn-add" onclick="addCustomCompetition('b3')">+ 添加比赛项目</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 板块四：社会工作与党员义务 -->
+        <div class="card section-card form-section mb-3" id="section-b4">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span>👔 板块四：社会工作与党员义务</span>
+            <span class="score-badge" id="score4">0分</span>
           </div>
           <div class="card-body">
             <div class="row g-2 mb-2">
               <div class="col-md-4">
                 <label class="form-label">担任学生干部职务数量</label>
-                <input type="number" id="b3_cadre" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+                <input type="number" id="b4_cadre" class="form-control form-control-sm" min="0" max="3" value="0" oninput="calcBlock4()">
+                <div class="form-text">1个 3 分，2个及以上 5 分</div>
               </div>
               <div class="col-md-4">
                 <div class="form-check mt-4">
-                  <input class="form-check-input" type="checkbox" id="b3_cadreExcellent" onchange="calcBlock3()">
-                  <label class="form-check-label" for="b3_cadreExcellent">综测考评学生干部为优秀等级（+5分）</label>
+                  <input class="form-check-input" type="checkbox" id="b4_cadreExcellent" onchange="calcBlock4()">
+                  <label class="form-check-label" for="b4_cadreExcellent">综测考评学生干部为优秀等级（+5分）</label>
                 </div>
               </div>
               <div class="col-md-4">
                 <label class="form-label">无故缺席活动/会议次数</label>
-                <input type="number" id="b3_absenceCount" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+                <input type="number" id="b4_absenceCount" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock4()">
               </div>
             </div>
             <div class="row g-2 mb-2">
               <div class="col-md-4">
                 <label class="form-label">优秀学生次数（+2分/次）</label>
-                <input type="number" id="b3_excellentStudent" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+                <input type="number" id="b4_excellentStudent" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock4()">
               </div>
               <div class="col-md-4">
                 <label class="form-label">优秀学生干部次数（+2分/次）</label>
-                <input type="number" id="b3_excellentCadre" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+                <input type="number" id="b4_excellentCadre" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock4()">
               </div>
               <div class="col-md-4">
                 <label class="form-label">优秀共青团员次数（+2分/次）</label>
-                <input type="number" id="b3_excellentLeague" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+                <input type="number" id="b4_excellentLeague" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock4()">
               </div>
             </div>
             <div class="row g-2 mb-2">
               <div class="col-md-4">
                 <label class="form-label">帮扶学习困难同学季度数</label>
-                <input type="number" id="b3_studyHelpQuarter" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+                <input type="number" id="b4_studyHelpQuarter" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock4()">
               </div>
               <div class="col-md-4">
                 <label class="form-label">帮助民族班级季度数</label>
-                <input type="number" id="b3_ethnicHelpQuarter" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+                <input type="number" id="b4_ethnicHelpQuarter" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock4()">
               </div>
               <div class="col-md-4">
                 <label class="form-label">先进事迹</label>
-                <select id="b3_advancedDeed" class="form-select form-select-sm" onchange="calcBlock3()">
+                <select id="b4_advancedDeed" class="form-select form-select-sm" onchange="calcBlock4()">
                   <option value="">无</option>
                   <option value="righteous">见义勇为、舍己救人</option>
                   <option value="helpful">扶残助弱、拾金不昧</option>
@@ -265,43 +380,53 @@ body{background:#f1f5f9;font-size:14px;}
             <div class="row g-2 mb-2">
               <div class="col-md-4">
                 <label class="form-label">支部活动参与次数（+1分/次）</label>
-                <input type="number" id="b3_branchActivity" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+                <input type="number" id="b4_branchActivity" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock4()">
               </div>
               <div class="col-md-4">
                 <label class="form-label">课堂回答问题次数（+1分/次）</label>
-                <input type="number" id="b3_answerQuestion" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()">
+                <input type="number" id="b4_answerQuestion" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock4()">
               </div>
             </div>
             <label class="form-label fw-semibold">职务情况描述（用于导出）</label>
-            <textarea id="b3_positionDesc" class="form-control form-control-sm" rows="2" placeholder="如：班长、团支书、学生会主席等" oninput="calcBlock3()"></textarea>
+            <textarea id="b4_positionDesc" class="form-control form-control-sm" rows="2" placeholder="如：班长、团支书、学生会主席等" oninput="calcBlock4()"></textarea>
 
             <hr class="my-3">
             <label class="form-label fw-semibold">先进集体/表彰加分</label>
-            <div id="b3_collectiveAwards"></div>
-            <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB3CollectiveAward()">+ 添加集体表彰</button>
+            <div id="b4_collectiveAwards"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB4CollectiveAward()">+ 添加集体表彰</button>
+            <div class="extension-panel">
+              <div class="extension-panel-title"><strong>荣誉记录</strong><span class="small text-muted">每个具体荣誉只计一次：校级 3 分，院级 2 分</span></div>
+              <div id="b4_honors" class="enhancement-list"></div>
+              <button type="button" class="btn btn-sm btn-outline-primary btn-add" onclick="addHonorRecord('b4')">+ 添加荣誉</button>
+            </div>
+            <div class="extension-panel">
+              <div class="extension-panel-title"><strong>自定义比赛项目</strong><span class="small text-muted">按填写分值累计</span></div>
+              <div id="b4_customCompetitions" class="enhancement-list"></div>
+              <button type="button" class="btn btn-sm btn-outline-primary btn-add" onclick="addCustomCompetition('b4')">+ 添加比赛项目</button>
+            </div>
           </div>
         </div>
 
-        <!-- 板块四 -->
-        <div class="card section-card mb-3">
+        <!-- 板块五：学科/科技竞赛 -->
+        <div class="card section-card form-section mb-3" id="section-b5">
           <div class="card-header d-flex justify-content-between align-items-center">
-            <span>🔬 板块四：学科/科技竞赛</span>
-            <span class="score-badge" id="score4">0分</span>
+            <span>🔬 板块五：学科/科技竞赛</span>
+            <span class="score-badge" id="score5">0分</span>
           </div>
           <div class="card-body">
-            <div class="alert alert-info py-2 small mb-2">学科竞赛得分×0.6，非学科竞赛得分×0.4，两类分别累加后相加为板块四总分</div>
+            <div class="alert alert-info py-2 small mb-2">学科竞赛得分×0.6，非学科竞赛得分×0.4，两类分别累加后相加为板块五总分</div>
             <div class="alert alert-warning py-2 small mb-2">先判断填的是哪个框：第一个框选择 144 项竞赛按学科竞赛×0.6；第二个框手动输入按非学科竞赛×0.4。</div>
             <label class="form-label fw-semibold">竞赛获奖记录</label>
-            <div id="b4_competitions"></div>
-            <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB4Competition()">+ 添加竞赛获奖</button>
+            <div id="b5_competitions"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB5Competition()">+ 添加竞赛获奖</button>
 
             <!-- 科技创新团队 -->
             <hr class="my-3">
             <div class="mb-3">
               <label class="form-label fw-semibold">科技创新团队</label>
               <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="b4_techTeam" onchange="calcBlock4()">
-                <label class="form-check-label" for="b4_techTeam">
+                <input class="form-check-input" type="checkbox" id="b5_techTeam" onchange="calcBlock5()">
+                <label class="form-check-label" for="b5_techTeam">
                   参加学校学院科技创新团队（如南疆之星、沙漠胡杨、机器人产业班、比亚迪产业班等）
                 </label>
                 <div class="form-text">参加科技创新团队可加3分</div>
@@ -311,26 +436,26 @@ body{background:#f1f5f9;font-size:14px;}
             <!-- 大学生创新创业训练计划 -->
             <hr class="my-3">
             <label class="form-label fw-semibold">大学生创新创业训练计划</label>
-            <div id="b4_innovations"></div>
-            <button class="btn btn-sm btn-outline-primary btn-add mt-1 mb-3" onclick="addB4Innovation()">+ 添加大创项目</button>
+            <div id="b5_innovations"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1 mb-3" onclick="addB5Innovation()">+ 添加大创项目</button>
 
             <!-- 出版学术著作 -->
             <hr class="my-3">
             <label class="form-label fw-semibold">出版学术著作</label>
-            <div id="b4_academicWorks"></div>
-            <button class="btn btn-sm btn-outline-primary btn-add mt-1 mb-3" onclick="addB4AcademicWork()">+ 添加学术著作</button>
+            <div id="b5_academicWorks"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1 mb-3" onclick="addB5AcademicWork()">+ 添加学术著作</button>
 
             <!-- 发表学术论文 -->
             <hr class="my-3">
             <label class="form-label fw-semibold">发表学术论文</label>
-            <div id="b4_academicPapers"></div>
-            <button class="btn btn-sm btn-outline-primary btn-add mt-1 mb-3" onclick="addB4AcademicPaper()">+ 添加学术论文</button>
+            <div id="b5_academicPapers"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1 mb-3" onclick="addB5AcademicPaper()">+ 添加学术论文</button>
 
             <!-- 科技发明专利及软件著作权 -->
             <hr class="my-3">
             <label class="form-label fw-semibold">科技发明专利及软件著作权</label>
-            <div id="b4_patents"></div>
-            <button class="btn btn-sm btn-outline-primary btn-add mt-1 mb-3" onclick="addB4Patent()">+ 添加专利/著作权</button>
+            <div id="b5_patents"></div>
+            <button class="btn btn-sm btn-outline-primary btn-add mt-1 mb-3" onclick="addB5Patent()">+ 添加专利/著作权</button>
 
             <!-- 考取资格证书 -->
             <hr class="my-3">
@@ -338,27 +463,27 @@ body{background:#f1f5f9;font-size:14px;}
             <div class="row g-2 mb-2">
               <div class="col-md-4">
                 <div class="form-check">
-                  <input class="form-check-input" type="checkbox" id="b4_cet4" onchange="calcBlock4()">
-                  <label class="form-check-label" for="b4_cet4">英语四级（≥425分）</label>
+                  <input class="form-check-input" type="checkbox" id="b5_cet4" onchange="calcBlock5()">
+                  <label class="form-check-label" for="b5_cet4">英语四级（≥425分）</label>
                 </div>
               </div>
               <div class="col-md-4">
                 <div class="form-check">
-                  <input class="form-check-input" type="checkbox" id="b4_cet6" onchange="calcBlock4()">
-                  <label class="form-check-label" for="b4_cet6">英语六级（≥425分）</label>
+                  <input class="form-check-input" type="checkbox" id="b5_cet6" onchange="calcBlock5()">
+                  <label class="form-check-label" for="b5_cet6">英语六级（≥425分）</label>
                 </div>
               </div>
               <div class="col-md-4">
                 <div class="form-check">
-                  <input class="form-check-input" type="checkbox" id="b4_mandarin" onchange="calcBlock4()">
-                  <label class="form-check-label" for="b4_mandarin">普通话二级乙等及以上</label>
+                  <input class="form-check-input" type="checkbox" id="b5_mandarin" onchange="calcBlock5()">
+                  <label class="form-check-label" for="b5_mandarin">普通话二级乙等及以上</label>
                 </div>
               </div>
             </div>
             <div class="row g-2 mb-2">
               <div class="col-md-6">
                 <label class="form-label small">全国计算机等级考试</label>
-                <select id="b4_ncre" class="form-select form-select-sm" onchange="calcBlock4()">
+                <select id="b5_ncre" class="form-select form-select-sm" onchange="calcBlock5()">
                   <option value="">未考取</option>
                   <option value="ncre4Excellent">四级优秀</option>
                   <option value="ncre4Pass">四级合格</option>
@@ -370,8 +495,8 @@ body{background:#f1f5f9;font-size:14px;}
               </div>
               <div class="col-md-6">
                 <label class="form-label small">专业相关资格证书</label>
-                <div id="b4_professionalCerts"></div>
-                <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB4ProfessionalCert()">+ 添加专业证书</button>
+                <div id="b5_professionalCerts"></div>
+                <button class="btn btn-sm btn-outline-primary btn-add mt-1" onclick="addB5ProfessionalCert()">+ 添加专业证书</button>
               </div>
             </div>
             <div class="alert alert-warning py-2 small mb-0">
@@ -380,24 +505,24 @@ body{background:#f1f5f9;font-size:14px;}
           </div>
         </div>
 
-        <!-- 板块五 -->
-        <div class="card section-card mb-3">
+        <!-- 板块六：学业成绩 -->
+        <div class="card section-card form-section mb-3" id="section-b6">
           <div class="card-header d-flex justify-content-between align-items-center">
-            <span>📚 板块五：学业成绩</span>
-            <span class="score-badge" id="score5">0分</span>
+            <span>📚 板块六：学业成绩</span>
+            <span class="score-badge" id="score6">0分</span>
           </div>
           <div class="card-body">
             <div class="row g-2 mb-3">
               <div class="col-md-6">
                 <label class="form-label">平均成绩</label>
-                <input type="number" id="b5_avg" class="form-control form-control-sm" min="0" max="100" step="0.1" value="70" oninput="calcBlock5()">
+                <input type="number" id="b6_avg" class="form-control form-control-sm" min="0" max="100" step="0.1" value="70" oninput="calcBlock6()">
                 <div class="form-text">基准70分，每高1分+1分，不设最高分限制</div>
               </div>
             </div>
 
             <hr class="my-3">
             <label class="form-label fw-semibold">挂科情况</label>
-            <div id="b5_fails">
+            <div id="b6_fails">
               <div class="alert alert-info py-2 small mb-2">
                 <strong>挂科扣分规则（上不封顶）：</strong><br>
                 - 有一项挂科：-5分<br>
@@ -406,7 +531,17 @@ body{background:#f1f5f9;font-size:14px;}
                 - 挂科且重修未出成绩：-8分
               </div>
             </div>
-            <button class="btn btn-sm btn-outline-danger btn-add mt-1" onclick="addB5Fail()">+ 添加挂科记录</button>
+            <button class="btn btn-sm btn-outline-danger btn-add mt-1" onclick="addB6Fail()">+ 添加挂科记录</button>
+            <div class="extension-panel">
+              <div class="extension-panel-title"><strong>荣誉记录</strong><span class="small text-muted">每个具体荣誉只计一次：校级 3 分，院级 2 分</span></div>
+              <div id="b6_honors" class="enhancement-list"></div>
+              <button type="button" class="btn btn-sm btn-outline-primary btn-add" onclick="addHonorRecord('b6')">+ 添加荣誉</button>
+            </div>
+            <div class="extension-panel">
+              <div class="extension-panel-title"><strong>自定义比赛项目</strong><span class="small text-muted">按填写分值累计</span></div>
+              <div id="b6_customCompetitions" class="enhancement-list"></div>
+              <button type="button" class="btn btn-sm btn-outline-primary btn-add" onclick="addCustomCompetition('b6')">+ 添加比赛项目</button>
+            </div>
           </div>
         </div>
 
@@ -416,20 +551,21 @@ body{background:#f1f5f9;font-size:14px;}
           <button class="btn btn-outline-secondary" onclick="clearForm()">🗑️ 清空表单</button>
           <span id="editingHint" class="text-warning small align-self-center d-none">正在编辑记录 #<span id="editingId"></span></span>
         </div>
-      </div>
+      </main>
 
       <!-- 右侧：实时得分 -->
-      <div class="col-lg-4">
-        <div class="card sticky-top" style="top:70px;">
+      <aside class="score-preview-shell">
+        <div class="card">
           <div class="card-header" style="background:linear-gradient(90deg,#fef3c7,#fde68a);color:#92400e;">📊 实时得分预览</div>
           <div class="card-body">
             <table class="table table-sm mb-0">
               <tbody>
                 <tr><td>板块一：文体模块</td><td class="text-end fw-bold" id="preview1">0</td></tr>
                 <tr><td>板块二：社会实践</td><td class="text-end fw-bold" id="preview2">0</td></tr>
-                <tr><td>板块三：社会工作</td><td class="text-end fw-bold" id="preview3">0</td></tr>
-                <tr><td>板块四：学科竞赛</td><td class="text-end fw-bold" id="preview4">0</td></tr>
-                <tr><td>板块五：学业成绩</td><td class="text-end fw-bold" id="preview5">0</td></tr>
+                <tr><td>板块三：志愿服务</td><td class="text-end fw-bold" id="preview3">0</td></tr>
+                <tr><td>板块四：社会工作</td><td class="text-end fw-bold" id="preview4">0</td></tr>
+                <tr><td>板块五：学科竞赛</td><td class="text-end fw-bold" id="preview5">0</td></tr>
+                <tr><td>板块六：学业成绩</td><td class="text-end fw-bold" id="preview6">0</td></tr>
                 <tr class="table-warning"><td><strong>总分</strong></td><td class="text-end"><strong id="previewTotal">0</strong></td></tr>
               </tbody>
             </table>
@@ -437,7 +573,7 @@ body{background:#f1f5f9;font-size:14px;}
             <div id="previewDetail" class="small text-muted" style="max-height:300px;overflow-y:auto;"></div>
           </div>
         </div>
-      </div>
+      </aside>
     </div>
   </div>
 
@@ -531,8 +667,9 @@ body{background:#f1f5f9;font-size:14px;}
 
 <script src="lib/bootstrap.bundle.min.js"></script>
 <script src="lib/xlsx.full.min.js"></script>
-<script src="rules.local.js?v=20260520-offline-1"></script>
-<script src="import-parser.js?v=20260918-flex-import-2"></script>
-<script src="app.js?v=20260918-flex-import-2"></script>
+<script src="rules.local.js?v=20260919-6block-1"></script>
+<script src="import-parser.js?v=20260919-6block-1"></script>
+<script src="score-enhancements.js?v=20260919-6block-1"></script>
+<script src="app.js?v=20260919-6block-1"></script>
 </body>
 </html>
