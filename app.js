@@ -505,8 +505,6 @@ function addEnhancementScore(score, details, block) {
 }
 
 const UNIQUE_SCORING_INPUT_SELECTORS = [
-  '#b5_competitions .b5-name-select',
-  '#b5_competitions .b5-name-manual',
   '#b1_competitions .b1-name',
   '#b2_competitions .b2-competition-name',
   '#b2_practices .b2-name',
@@ -768,10 +766,13 @@ function addB5Competition(data) {
   const container = document.getElementById('b5_competitions');
   const levels = ['院级','校级','省级','国家级'];
   const awards = ['特等奖','一等奖','二等奖','三等奖','优秀奖','参加过'];
-  const academicName = data.selectedName || (data.isAcademic ? (data.name || '') : '');
-  const manualName = data.isAcademic ? '' : (data.name || '');
+  const unresolvedAcademic = !!data.unresolved;
+  const academicName = unresolvedAcademic ? '' : (data.selectedName || (data.isAcademic ? (data.name || '') : ''));
+  const manualName = unresolvedAcademic ? (data.sourceName || data.name || '') : (data.isAcademic ? '' : (data.name || ''));
   const div = document.createElement('div');
   div.className = 'record-item';
+  div.dataset.unresolvedAcademic = unresolvedAcademic ? 'true' : 'false';
+  div.dataset.scoreEligible = data.scoreEligible === false ? 'false' : 'true';
   div.innerHTML =
     '<div class="row g-2">' +
     '<div class="col-md-4"><label class="form-label small">学科竞赛名称（144 项中选择）</label>' +
@@ -782,14 +783,17 @@ function addB5Competition(data) {
     '</select>' +
     '</div>' +
     '</div>' +
-    '<div class="col-md-4"><label class="form-label small">手动输入（按×0.4）</label>' +
-    '<input type="text" class="form-control form-control-sm b5-name-manual" placeholder="手动输入竞赛名称" value="' + escapeHtml(manualName) + '" oninput="calcBlock5()"></div>' +
+    '<div class="col-md-4"><label class="form-label small">' + (unresolvedAcademic ? 'J列原文（待匹配144项）' : '手动输入（按×0.4）') + '</label>' +
+    '<input type="text" class="form-control form-control-sm b5-name-manual" placeholder="手动输入竞赛名称" value="' + escapeHtml(manualName) + '" ' +
+    (unresolvedAcademic ? 'readonly ' : '') + 'oninput="calcBlock5()"></div>' +
     '<div class="col-md-2"><label class="form-label small">级别</label>' +
     '<select class="form-select form-select-sm b5-level" onchange="calcBlock5()">' +
+    '<option value=""' + (!data.level ? ' selected' : '') + '>待确认</option>' +
     levels.map(function(l){ return '<option' + (data.level===l?' selected':'') + '>' + l + '</option>'; }).join('') +
     '</select></div>' +
     '<div class="col-md-2"><label class="form-label small">奖项</label>' +
     '<select class="form-select form-select-sm b5-award" onchange="calcBlock5()">' +
+    '<option value=""' + (!data.award ? ' selected' : '') + '>待确认</option>' +
     awards.map(function(a){ return '<option' + (data.award===a?' selected':'') + '>' + a + '</option>'; }).join('') +
     '</select></div>' +
     '<div class="col-md-3 d-flex align-items-end"><span class="b5-type-badge badge bg-secondary small"></span></div>' +
@@ -1011,7 +1015,7 @@ function scoreBlock4(b4, rules) {
   const details = [];
   const cadreCount = Math.min(Math.max(Math.floor(Number(b4.cadre) || 0), 0), 3);
   if (cadreCount > 0) {
-    const cadrePoints = cadreCount === 1 ? (r.cadreOne ?? 3) : (r.cadreTwo ?? 5);
+    const cadrePoints = cadreCount === 1 ? (r.cadreOne ?? 2) : cadreCount === 2 ? (r.cadreTwo ?? 3) : (r.cadreThree ?? 5);
     score += cadrePoints;
     details.push('担任' + cadreCount + '个职务+' + cadrePoints);
   }
@@ -1056,6 +1060,12 @@ function scoreBlock5(b5, rules) {
   const academicDetails = [], nonAcademicDetails = [], directBonusDetails = [];
   const aw = r.academicWeight||0.6, naw = r.nonAcademicWeight||0.4;
   (b5.competitions||[]).forEach(function(c) {
+    if (c.scoreEligible === false || c.unresolved) {
+      const unscoredName = c.sourceName || c.name || '竞赛';
+      const target = c.isAcademic ? academicDetails : nonAcademicDetails;
+      target.push(unscoredName + '[待核对]不计分');
+      return;
+    }
     const pts = (matrix[c.level] && matrix[c.level][c.award]) || 0;
     if (c.isAcademic) {
       academicRaw += pts;
@@ -1475,7 +1485,6 @@ function calcBlock4() {
 function calcBlock5() {
   const b5Comps = [];
   document.querySelectorAll('#b5_competitions .record-item').forEach(function(item) {
-    const owners = refreshDuplicateScoringState();
     const academicInput = item.querySelector('.b5-name-select');
     const manualInput = item.querySelector('.b5-name-manual');
     const academicName = academicInput.value.trim();
@@ -1483,20 +1492,28 @@ function calcBlock5() {
     const level = item.querySelector('.b5-level').value;
     const award = item.querySelector('.b5-award').value;
     const badge = item.querySelector('.b5-type-badge');
+    const unresolvedAcademic = item.dataset.unresolvedAcademic === 'true';
+    const scoreEligible = item.dataset.scoreEligible !== 'false';
+    if (unresolvedAcademic && !academicName) {
+      badge.textContent = 'J列待匹配（0分）';
+      badge.className = 'b5-type-badge badge bg-warning text-dark small';
+      if (manualName) b5Comps.push({ name: manualName, sourceName: manualName, selectedName: '', level: level, award: award, isAcademic: true, unresolved: true, scoreEligible: false });
+      return;
+    }
     if (!academicName && !manualName) {
       badge.textContent = '';
       badge.className = 'b5-type-badge badge bg-secondary small';
       return;
     }
-    if (academicName && isUniqueScoringInput(academicInput, owners)) {
-      badge.textContent = '学科竞赛';
-      badge.className = 'b5-type-badge badge bg-primary small';
-      b5Comps.push({ name: academicName, level: level, award: award, isAcademic: true });
+    if (academicName) {
+      badge.textContent = scoreEligible && level && award ? '学科竞赛' : '信息待确认（0分）';
+      badge.className = scoreEligible && level && award ? 'b5-type-badge badge bg-primary small' : 'b5-type-badge badge bg-warning text-dark small';
+      b5Comps.push({ name: academicName, level: level, award: award, isAcademic: true, scoreEligible: scoreEligible && !!level && !!award });
     }
-    if (manualName && isUniqueScoringInput(manualInput, owners)) {
-      badge.textContent = '非学科竞赛';
-      badge.className = 'b5-type-badge badge bg-success small';
-      b5Comps.push({ name: manualName, level: level, award: award, isAcademic: false });
+    if (manualName) {
+      badge.textContent = scoreEligible && level && award ? '非学科竞赛' : '信息待确认（0分）';
+      badge.className = scoreEligible && level && award ? 'b5-type-badge badge bg-success small' : 'b5-type-badge badge bg-warning text-dark small';
+      b5Comps.push({ name: manualName, level: level, award: award, isAcademic: false, scoreEligible: scoreEligible && !!level && !!award });
     }
   });
   const b5AcademicWorks = [];
@@ -1625,11 +1642,17 @@ function collectFormData() {
     const manualName = manualInput.value.trim();
     const level = item.querySelector('.b5-level').value;
     const award = item.querySelector('.b5-award').value;
-    if (academicName && isUniqueScoringInput(academicInput, scoringOwners)) {
-      b5Comps.push({ name: academicName, selectedName: academicName, isManual: false, level: level, award: award, isAcademic: true });
+    const unresolvedAcademic = item.dataset.unresolvedAcademic === 'true';
+    const scoreEligible = item.dataset.scoreEligible !== 'false';
+    if (unresolvedAcademic && !academicName) {
+      if (manualName) b5Comps.push({ name: manualName, sourceName: manualName, selectedName: '', isManual: false, level: level, award: award, isAcademic: true, unresolved: true, scoreEligible: false });
+      return;
     }
-    if (manualName && isUniqueScoringInput(manualInput, scoringOwners)) {
-      b5Comps.push({ name: manualName, selectedName: '', isManual: true, level: level, award: award, isAcademic: false });
+    if (academicName) {
+      b5Comps.push({ name: academicName, selectedName: academicName, isManual: false, level: level, award: award, isAcademic: true, scoreEligible: scoreEligible && !!level && !!award });
+    }
+    if (manualName) {
+      b5Comps.push({ name: manualName, selectedName: '', isManual: true, level: level, award: award, isAcademic: false, scoreEligible: scoreEligible && !!level && !!award });
     }
   });
 
@@ -2410,6 +2433,7 @@ function deduplicateRecordScoringItems(record) {
   const seen = new Set();
   function unique(items, getName) {
     return (Array.isArray(items) ? items : []).filter(function(item) {
+      if (item && item.scoreEligible === false) return true;
       const key = ScoreEnhancements.normalizeScoringName(getName(item));
       if (!key || seen.has(key)) return false;
       seen.add(key);
@@ -2419,7 +2443,13 @@ function deduplicateRecordScoringItems(record) {
   const blocks = ['b1', 'b2', 'b3', 'b4', 'b5', 'b6'];
   blocks.forEach(function(block) { record[block] = record[block] || {}; });
 
-  record.b5.competitions = unique(record.b5.competitions, function(item) { return item && item.name; });
+  record.b5.competitions = (Array.isArray(record.b5.competitions) ? record.b5.competitions : []).map(function(item) {
+    if (!item) return item;
+    const normalized = Object.assign({}, item);
+    delete normalized.duplicate;
+    normalized.scoreEligible = !normalized.unresolved && !!normalized.level && !!normalized.award;
+    return normalized;
+  }).filter(Boolean);
   record.b1.competitions = unique(record.b1.competitions, function(item) { return item && item.name; });
   record.b2.competitions = unique(record.b2.competitions, function(item) { return item && item.name; });
   record.b2.practices = unique(record.b2.practices, function(item) { return item && (item.name || item.desc); });
@@ -2622,6 +2652,11 @@ function buildDetailsForRecord(s) {
   const naw = b5r.nonAcademicWeight || 0.4;
   const acDets = [], nonAcDets = [];
   ((s.b5 || {}).competitions||[]).forEach(function(c) {
+    if (c.scoreEligible === false || c.unresolved) {
+      const unscored = (c.sourceName || c.name || '竞赛') + '[待核对]不计分';
+      if (c.isAcademic) acDets.push(unscored); else nonAcDets.push(unscored);
+      return;
+    }
     const pts = (matrix[c.level] && matrix[c.level][c.award]) || 0;
     const str = c.isAcademic
       ? (c.name||'竞赛') + '[' + c.level + c.award + ']原始+' + pts + '，折算+' + (pts * aw)

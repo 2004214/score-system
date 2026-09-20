@@ -98,7 +98,7 @@
 
   function calculateCadreScore(count) {
     const normalizedCount = Math.min(Math.max(Math.floor(nonNegativeNumber(count)), 0), 3);
-    const points = normalizedCount === 1 ? 3 : normalizedCount >= 2 ? 5 : 0;
+    const points = normalizedCount === 1 ? 2 : normalizedCount === 2 ? 3 : normalizedCount >= 3 ? 5 : 0;
     return { count: normalizedCount, points: points };
   }
 
