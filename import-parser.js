@@ -274,6 +274,22 @@
     return matches ? matches.length : 0;
   }
 
+  // 三下乡/返家乡按年度计分，同一年重复填写只保留一次。
+  function countAnnualOccurrences(text, keyword) {
+    const years = new Set();
+    let hasUnknownYear = false;
+    splitEntries(text).forEach(function(entry) {
+      if (entry.indexOf(keyword) < 0) return;
+      const entryYears = entry.match(/(?:19|20)\d{2}(?=年|[-/.]|\b)/g) || [];
+      if (entryYears.length) {
+        entryYears.forEach(function(year) { years.add(year); });
+      } else {
+        hasUnknownYear = true;
+      }
+    });
+    return years.size + (hasUnknownYear ? 1 : 0);
+  }
+
   function parseVolunteerHours(value, warnings, evidence) {
     const text = cleanText(value);
     if (!text) return { total: 0, recent: 0 };
@@ -613,8 +629,8 @@
       remark: cleanText(cell('remark')),
       b1: { noViolation: false, club: 0, competitions: b1Competitions, publications: [], honors: b1Honors, customCompetitions: [], importedUnscored: culture.unscored },
       b2: {
-        sanxia: countMatches(practiceText, /三下乡/g),
-        fanjia: countMatches(practiceText, /返家乡/g),
+        sanxia: countAnnualOccurrences(practiceText, '三下乡'),
+        fanjia: countAnnualOccurrences(practiceText, '返家乡'),
         practices: practices,
         competitions: [],
         honors: [],
@@ -704,8 +720,8 @@
     if (!name) addWarning(warnings, '姓名', '缺少姓名，不能导入该行', '', 'error');
     if (!className) addWarning(warnings, '班级', '缺少班级，无法自动匹配重复人员', '', 'warning');
     if (failRecent > 0) evidence.push('近一年不及格' + failRecent + '门，每门按普通挂科扣分');
-    if (record.b2.sanxia) evidence.push('三下乡' + record.b2.sanxia + '次');
-    if (record.b2.fanjia) evidence.push('返家乡' + record.b2.fanjia + '次');
+    if (record.b2.sanxia) evidence.push('三下乡按年份计' + record.b2.sanxia + '次（同年重复仅计1次）');
+    if (record.b2.fanjia) evidence.push('返家乡按年份计' + record.b2.fanjia + '次（同年重复仅计1次）');
 
     const hasError = warnings.some(function(item) { return item.severity === 'error'; });
     return {
@@ -741,6 +757,7 @@
     normalizeHeader: normalizeHeader,
     normalizeIdentity: normalizeIdentity,
     splitEntries: splitEntries,
+    countAnnualOccurrences: countAnnualOccurrences,
     inferLevel: inferLevel,
     detectAward: detectAward,
     findAcademicCompetition: findAcademicCompetition,

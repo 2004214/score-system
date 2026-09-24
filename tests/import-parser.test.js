@@ -79,6 +79,18 @@ test('prefers explicit levels and infers organizer levels', () => {
   assert.equal(parser.inferLevel('国家级项目获校级二等奖').conflict, true);
 });
 
+test('counts 三下乡 and 返家乡 once per year', () => {
+  assert.equal(
+    parser.countAnnualOccurrences('2024年暑期三下乡活动；2024年三下乡获院级优秀团队；2025年寒假三下乡活动', '三下乡'),
+    2
+  );
+  assert.equal(
+    parser.countAnnualOccurrences('2024年返家乡实践；2024年返家乡获奖；2026年返家乡实践', '返家乡'),
+    2
+  );
+  assert.equal(parser.countAnnualOccurrences('三下乡、三下乡', '三下乡'), 1);
+});
+
 test('matches every official academic competition to its canonical library name', () => {
   const competitions = RULES.block5.academicCompetitions;
   assert.equal(competitions.length, 144);
