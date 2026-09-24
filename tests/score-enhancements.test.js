@@ -84,10 +84,10 @@ test('does not merge the same annual activity from different years', () => {
   assert.equal(result.data.honors.length, 2);
 });
 
-test('cadre scoring uses 2, 3 and 5 points with a three-role cap', () => {
+test('cadre fallback scoring uses 3 points for any appointed role', () => {
   assert.deepEqual(enhancements.calculateCadreScore(0), { count: 0, points: 0 });
-  assert.deepEqual(enhancements.calculateCadreScore(1), { count: 1, points: 2 });
+  assert.deepEqual(enhancements.calculateCadreScore(1), { count: 1, points: 3 });
   assert.deepEqual(enhancements.calculateCadreScore(2), { count: 2, points: 3 });
-  assert.deepEqual(enhancements.calculateCadreScore(3), { count: 3, points: 5 });
-  assert.deepEqual(enhancements.calculateCadreScore(9), { count: 3, points: 5 });
+  assert.deepEqual(enhancements.calculateCadreScore(3), { count: 3, points: 3 });
+  assert.deepEqual(enhancements.calculateCadreScore(9), { count: 3, points: 3 });
 });

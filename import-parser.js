@@ -314,7 +314,15 @@
       if (levelInfo.inferred) {
         addWarning(warnings, '社会实践', '按' + levelInfo.reason + '推断为' + levelInfo.level, entry);
       }
-      if (award && levelInfo.level) {
+      const splitExcellent = entry.match(/优秀团队\s*(?:[/、,，和及与]|与)\s*优秀个人|优秀个人\s*(?:[/、,，和及与]|与)\s*优秀团队/);
+      if (splitExcellent && levelInfo.level) {
+        const teamName = entry.replace(splitExcellent[0], '优秀团队');
+        const personName = entry.replace(splitExcellent[0], '优秀个人');
+        practices.push({ name: teamName, level: levelInfo.level, award: '优秀' });
+        practices.push({ name: personName, level: levelInfo.level, award: '优秀' });
+        evidence.push('社会实践：' + levelInfo.level + '优秀团队');
+        evidence.push('社会实践：' + levelInfo.level + '优秀个人');
+      } else if (award && levelInfo.level) {
         practices.push({ name: entry, level: levelInfo.level, award: award });
         evidence.push('社会实践：' + levelInfo.level + award);
       } else {

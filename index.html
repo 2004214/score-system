@@ -198,6 +198,12 @@ body{background:#f1f5f9;font-size:14px;overflow-x:hidden;-webkit-font-smoothing:
                 <label class="form-label">备注</label>
                 <textarea id="f_remark" class="form-control form-control-sm" rows="2" placeholder="可记录国奖/国励、四六级、计算机等级考试、清零依据说明等"></textarea>
               </div>
+              <div class="col-md-12">
+                <div class="form-check mt-1">
+                  <input class="form-check-input" type="checkbox" id="f_zeroed" onchange="_detailCache.zeroed=this.checked; updateTotal()">
+                  <label class="form-check-label text-danger" for="f_zeroed">存在细则所列重大违规情形，评分直接清零（仅保留参与记录和备注）</label>
+                </div>
+              </div>
             </div>
             <input type="hidden" id="f_failRecent" value="0">
             <input type="hidden" id="f_failTotal" value="0">
@@ -293,7 +299,7 @@ body{background:#f1f5f9;font-size:14px;overflow-x:hidden;-webkit-font-smoothing:
             <span class="score-badge" id="score3">0分</span>
           </div>
           <div class="card-body">
-            <div class="alert alert-info py-2 small mb-2">志愿服务：志愿时长以60小时为基准线，每超过5小时加1分，少的不扣分，最高加10分。优秀志愿者、星级志愿者各加2分。</div>
+            <div class="alert alert-info py-2 small mb-2">志愿服务：年度平均志愿时长为28.88小时，每超过5小时加1分，少的不扣分，最高加10分。优秀志愿者、星级志愿者各加2分。</div>
             <div class="row g-2 mb-2">
               <div class="col-md-3"><label class="form-label">志愿汇总时长（小时）</label><input type="number" id="b3_volHours" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()"></div>
               <div class="col-md-3"><label class="form-label">近一年志愿时长（小时）</label><input type="number" id="b3_volHoursRecent" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock3()"></div>
@@ -332,7 +338,7 @@ body{background:#f1f5f9;font-size:14px;overflow-x:hidden;-webkit-font-smoothing:
               <div class="col-md-4">
                 <label class="form-label">担任学生干部职务数量</label>
                 <input type="number" id="b4_cadre" class="form-control form-control-sm" min="0" max="3" value="0" oninput="calcBlock4()">
-                <div class="form-text">1个 2 分，2个 3 分，3个及以上 5 分（最多按3个计）</div>
+                <div class="form-text">按最高职务档位计分：副书记/主席10分，部长/负责人8分，班长/团支书等5分，干事/委员3分；兼任不重复累计</div>
               </div>
               <div class="col-md-4">
                 <div class="form-check mt-4">
@@ -385,6 +391,15 @@ body{background:#f1f5f9;font-size:14px;overflow-x:hidden;-webkit-font-smoothing:
               <div class="col-md-4">
                 <label class="form-label">课堂回答问题次数（+1分/次）</label>
                 <input type="number" id="b4_answerQuestion" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock4()">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">组内活动折算分（上限10）</label>
+                <input type="number" id="b4_groupActivityScore" class="form-control form-control-sm" min="0" step="0.5" value="0" oninput="calcBlock4()">
+                <div class="form-text">回答问题0.5、党课PPT 1、其他考勤0.5；特殊情况和多天活动请先按细则折算</div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">大群活动次数（+1分/次）</label>
+                <input type="number" id="b4_bigGroupActivity" class="form-control form-control-sm" min="0" value="0" oninput="calcBlock4()">
               </div>
             </div>
             <label class="form-label fw-semibold">职务情况描述（用于导出）</label>
@@ -516,7 +531,7 @@ body{background:#f1f5f9;font-size:14px;overflow-x:hidden;-webkit-font-smoothing:
               <div class="col-md-6">
                 <label class="form-label">平均成绩</label>
                 <input type="number" id="b6_avg" class="form-control form-control-sm" min="0" max="100" step="0.1" value="70" oninput="calcBlock6()">
-                <div class="form-text">基准70分，每高1分+1分，不设最高分限制</div>
+                <div class="form-text">平均成绩超过70分先加10分，再按每超1分加1分；低于70分不加，成绩四舍五入</div>
               </div>
             </div>
 
@@ -667,9 +682,9 @@ body{background:#f1f5f9;font-size:14px;overflow-x:hidden;-webkit-font-smoothing:
 
 <script src="lib/bootstrap.bundle.min.js"></script>
 <script src="lib/xlsx.full.min.js"></script>
-<script src="rules.local.js?v=20260919-import-complete-3"></script>
-<script src="import-parser.js?v=20260919-import-complete-3"></script>
-<script src="score-enhancements.js?v=20260919-import-complete-3"></script>
-<script src="app.js?v=20260919-import-complete-3"></script>
+<script src="rules.local.js?v=20260925-rules-update-1"></script>
+<script src="import-parser.js?v=20260925-rules-update-1"></script>
+<script src="score-enhancements.js?v=20260925-rules-update-1"></script>
+<script src="app.js?v=20260925-rules-update-1"></script>
 </body>
 </html>

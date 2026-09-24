@@ -51,6 +51,7 @@ window.__OFFLINE_RULES__ = {
       "校级": 4,
       "兵团省级": 8
     },
+    "practiceBrand": { "院级": 3, "校级": 3, "兵团省级": 5, "国家级": 8 },
     "competition": {
       "国家级": {
         "一等奖": 20,
@@ -82,7 +83,7 @@ window.__OFFLINE_RULES__ = {
   },
   "block3": {
     "name": "志愿服务",
-    "volunteerBaseHours": 60,
+    "volunteerBaseHours": 28.88,
     "volunteerStepHours": 5,
     "volunteerPointsPerStep": 1,
     "volunteerMaxBonus": 10,
@@ -121,9 +122,10 @@ window.__OFFLINE_RULES__ = {
   },
   "block4": {
     "name": "社会工作与党员义务",
-    "cadreOne": 2,
+    "cadreOne": 3,
     "cadreTwo": 3,
-    "cadreThree": 5,
+    "cadreThree": 3,
+    "cadreRolePoints": { "tier10": 10, "tier8": 8, "tier5": 5, "tier3": 3 },
     "cadreExcellent": 5,
     "excellentStudent": 2,
     "excellentCadre": 2,
@@ -136,6 +138,8 @@ window.__OFFLINE_RULES__ = {
     "ethnicHelpPerQuarter": 8,
     "branchActivityPerTime": 1,
     "answerQuestionPerTime": 1,
+    "groupActivityMax": 10,
+    "bigGroupActivityPerTime": 1,
     "advancedDeeds": {
       "righteous": 8,
       "helpful": 5
@@ -391,6 +395,7 @@ window.__OFFLINE_RULES__ = {
     "name": "学业成绩",
     "baseScore": 70,
     "bonusPerPoint": 1,
+    "platformBaseBonus": 10,
     "failDeduction": {
       "fail": -5,
       "failRetakePass": -8,

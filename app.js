@@ -978,7 +978,7 @@ function scoreBlock2(b2, rules) {
 
 function scoreBlock3(b3, rules) {
   const r = rules.block3 || {};
-  const base = typeof r.volunteerBaseHours === 'number' ? r.volunteerBaseHours : 60;
+  const base = typeof r.volunteerBaseHours === 'number' ? r.volunteerBaseHours : 28.88;
   const stepHours = r.volunteerStepHours || 5;
   const pointsPerStep = r.volunteerPointsPerStep || 1;
   const maxBonus = typeof r.volunteerMaxBonus === 'number' ? r.volunteerMaxBonus : 10;
@@ -1015,9 +1015,16 @@ function scoreBlock4(b4, rules) {
   const details = [];
   const cadreCount = Math.min(Math.max(Math.floor(Number(b4.cadre) || 0), 0), 3);
   if (cadreCount > 0) {
-    const cadrePoints = cadreCount === 1 ? (r.cadreOne ?? 2) : cadreCount === 2 ? (r.cadreTwo ?? 3) : (r.cadreThree ?? 5);
+    const positionText = String(b4.positionDesc || '').replace(/\s+/g, '');
+    const rolePoints = positionText && r.cadreRolePoints ? (
+      /(团委副书记|学生会(?:正|副)?主席|院宿委会主任)/.test(positionText) ? (r.cadreRolePoints.tier10 || 10) :
+      (/(正部长|部门负责人|队长|主任|中心正副主任|宿委会副主任)/.test(positionText) && !/学生会副部长/.test(positionText)) ? (r.cadreRolePoints.tier8 || 8) :
+      (/(副部长|正副会长|副会长|楼长|副班主任|班长|团支书|学习委员)/.test(positionText)) ? (r.cadreRolePoints.tier5 || 5) :
+      (/(干事|楼层长|班委|委员)/.test(positionText) ? (r.cadreRolePoints.tier3 || 3) : 0)
+    ) : 0;
+    const cadrePoints = rolePoints || (cadreCount > 0 ? (r.cadreOne ?? 3) : 0);
     score += cadrePoints;
-    details.push('担任' + cadreCount + '个职务+' + cadrePoints);
+    details.push(rolePoints ? '学生干部按最高职务档位+' + cadrePoints : '担任' + cadreCount + '个职务+' + cadrePoints);
   }
   if (b4.cadreExcellent) { score += (r.cadreExcellent||5); details.push('学生干部优秀等级+' + (r.cadreExcellent||5)); }
   const exStudent = parseInt(b4.excellentStudent) || (b4.excellentStudent === true ? 1 : 0);
@@ -1029,9 +1036,21 @@ function scoreBlock4(b4, rules) {
   const studyHelp = b4.studyHelpQuarter || 0, ethnicHelp = b4.ethnicHelpQuarter || 0;
   if (studyHelp > 0) { const pts = studyHelp*(r.studyHelpPerQuarter||4); score += pts; details.push('学习帮扶' + studyHelp + '季度+' + pts); }
   if (ethnicHelp > 0) { const pts = ethnicHelp*(r.ethnicHelpPerQuarter||8); score += pts; details.push('民族班级互助' + ethnicHelp + '季度+' + pts); }
+  const groupScore = Math.max(Number(b4.groupActivityScore) || 0, 0);
+  const bigGroup = Math.max(Number(b4.bigGroupActivity) || 0, 0);
   const branchAct = b4.branchActivity || 0, answerQ = b4.answerQuestion || 0;
-  if (branchAct > 0) { const pts = branchAct*(r.branchActivityPerTime||1); score += pts; details.push('支部活动' + branchAct + '次+' + pts); }
-  if (answerQ > 0) { const pts = answerQ*(r.answerQuestionPerTime||1); score += pts; details.push('回答问题' + answerQ + '次+' + pts); }
+  if (!groupScore && branchAct > 0) { const pts = branchAct*(r.branchActivityPerTime||1); score += pts; details.push('支部活动' + branchAct + '次+' + pts); }
+  if (!groupScore && answerQ > 0) { const pts = answerQ*(r.answerQuestionPerTime||1); score += pts; details.push('回答问题' + answerQ + '次+' + pts); }
+  if (groupScore > 0) {
+    const capped = Math.min(groupScore, r.groupActivityMax || 10);
+    score += capped;
+    details.push('组内活动按细则+' + capped);
+  }
+  if (bigGroup > 0) {
+    const pts = bigGroup * (r.bigGroupActivityPerTime || 1);
+    score += pts;
+    details.push('大群活动' + bigGroup + '次+' + pts);
+  }
   if (b4.advancedDeed && r.advancedDeeds && r.advancedDeeds[b4.advancedDeed]) {
     score += r.advancedDeeds[b4.advancedDeed];
     details.push((b4.advancedDeed === 'righteous' ? '见义勇为/舍己救人' : '扶残助弱/拾金不昧') + '+' + r.advancedDeeds[b4.advancedDeed]);
@@ -1124,6 +1143,7 @@ function scoreBlock6(b6, rules) {
   const r = rules.block6 || {};
   const roundedAvg = Math.round(b6.avg||0);
   let avgBonus = Math.max((roundedAvg - (r.baseScore||70)) * (r.bonusPerPoint||1), 0);
+  if (roundedAvg > (r.baseScore || 70)) avgBonus += (r.platformBaseBonus || 0);
   const failDeductions = r.failDeduction || {};
   let failPenalty = 0;
   const failDetails = [];
@@ -1239,7 +1259,7 @@ function calcBlock1() {
 
 function detectPracticeLevelFromText(text) {
   const normalized = String(text || '').replace(/\s+/g, '');
-  if (!normalized || !/(优秀|表彰|先进)/.test(normalized)) return '';
+  if (!normalized || !/(优秀|表彰|先进|品牌项目|实践案例)/.test(normalized)) return '';
   if (/(兵团|省级|省部级)/.test(normalized)) return '兵团省级';
   if (/校级/.test(normalized)) return '校级';
   if (/(院级|院校级)/.test(normalized)) return '院级';
@@ -1250,18 +1270,24 @@ function detectVolunteerBonuses(practiceDescs, explicitState) {
   const r = RULES.block2 || {};
   const bonuses = [];
   let bestPractice = null;
+  let bestBrand = null;
   (practiceDescs || []).forEach(function(desc) {
     const text = String(desc || '').trim();
     if (!text) return;
     const practiceLevel = normalizePracticeLevel(detectPracticeLevelFromText(text));
     if (practiceLevel) {
-      const pts = (r.practiceExcellent && r.practiceExcellent[practiceLevel]) || 0;
-      if (pts && (!bestPractice || pts > bestPractice.pts)) {
-        bestPractice = { type: 'practice', label: '实践评优[' + practiceLevel + ']', pts: pts };
+      const isBrand = /品牌项目|实践案例/.test(text);
+      const source = isBrand ? r.practiceBrand : r.practiceExcellent;
+      const pts = (source && source[practiceLevel]) || 0;
+      const target = isBrand ? bestBrand : bestPractice;
+      if (pts && (!target || pts > target.pts)) {
+        const item = { type: 'practice', label: (isBrand ? '优秀品牌项目/实践案例' : '实践评优') + '[' + practiceLevel + ']', pts: pts };
+        if (isBrand) bestBrand = item; else bestPractice = item;
       }
     }
   });
   if (bestPractice) bonuses.push(bestPractice);
+  if (bestBrand) bonuses.push(bestBrand);
   return bonuses;
 }
 
@@ -1287,12 +1313,13 @@ function calculateStructuredPracticeBonuses(practices, explicitState) {
     const level = normalizePracticeLevel(rawLevel);
     const competitionLevel = normalizePracticeCompetitionLevel(rawLevel);
     const award = String(practice.award || '').trim();
-    if (award === '优秀') {
-      const pts = (r.practiceExcellent && r.practiceExcellent[level]) || 0;
+    if (award === '优秀' || /品牌项目|实践案例/.test(String(practice.name || ''))) {
+      const source = /品牌项目|实践案例/.test(String(practice.name || '')) ? r.practiceBrand : r.practiceExcellent;
+      const pts = (source && source[level]) || 0;
       if (pts) {
         bonuses.push({
           type: 'practice',
-          label: '实践评优[' + (String(practice.name || '').trim() || level) + (rawLevel ? '-' + rawLevel : '') + ']',
+          label: (/品牌项目|实践案例/.test(String(practice.name || '')) ? '优秀品牌项目/实践案例' : '实践评优') + '[' + (String(practice.name || '').trim() || level) + (rawLevel ? '-' + rawLevel : '') + ']',
           pts: pts
         });
       }
@@ -1468,6 +1495,8 @@ function calcBlock4() {
     ethnicHelpQuarter: parseInt(document.getElementById('b4_ethnicHelpQuarter').value) || 0,
     branchActivity: parseInt(document.getElementById('b4_branchActivity').value) || 0,
     answerQuestion: parseInt(document.getElementById('b4_answerQuestion').value) || 0,
+    groupActivityScore: parseFloat(document.getElementById('b4_groupActivityScore').value) || 0,
+    bigGroupActivity: parseInt(document.getElementById('b4_bigGroupActivity').value) || 0,
     advancedDeed: document.getElementById('b4_advancedDeed').value,
     collectiveAwards: b4CollectiveAwards,
     positionDesc: document.getElementById('b4_positionDesc').value.trim(),
@@ -1612,6 +1641,9 @@ function updatePreviewDetail() { /* 已合并到 updateTotal */ }
 // ===== 收集表单数据 =====
 function collectFormData() {
   const r1 = calcBlock1(), r2 = calcBlock2(), r3 = calcBlock3(), r4 = calcBlock4(), r5 = calcBlock5(), r6 = calcBlock6();
+  const zeroed = document.getElementById('f_zeroed').checked;
+  _detailCache.zeroed = zeroed;
+  updateTotal();
   const total = parseFloat(document.getElementById('previewTotal').textContent) || 0;
 
   const b1Comps = [];
@@ -1691,6 +1723,7 @@ function collectFormData() {
     cet: document.getElementById('f_cet').value.trim(),
     rank: document.getElementById('f_rank').value.trim(),
     remark: document.getElementById('f_remark').value.trim(),
+    zeroed: zeroed,
     b1: { noViolation: document.getElementById('b1_noViolation').checked, club: parseInt(document.getElementById('b1_club').value)||0, competitions: b1Comps, publications: b1Publications, honors: b1Enhancement.honors, customCompetitions: b1Enhancement.customCompetitions },
     b2: {
       sanxia: parseInt(document.getElementById('b2_sanxia').value)||0,
@@ -1721,6 +1754,8 @@ function collectFormData() {
       ethnicHelpQuarter: parseInt(document.getElementById('b4_ethnicHelpQuarter').value)||0,
       branchActivity: parseInt(document.getElementById('b4_branchActivity').value)||0,
       answerQuestion: parseInt(document.getElementById('b4_answerQuestion').value)||0,
+      groupActivityScore: parseFloat(document.getElementById('b4_groupActivityScore').value)||0,
+      bigGroupActivity: parseInt(document.getElementById('b4_bigGroupActivity').value)||0,
       advancedDeed: document.getElementById('b4_advancedDeed').value,
       collectiveAwards: b4CollectiveAwards,
       positionDesc: document.getElementById('b4_positionDesc').value.trim(),
@@ -1760,7 +1795,7 @@ function collectFormData() {
       honors: b6Enhancement.honors,
       customCompetitions: b6Enhancement.customCompetitions
     },
-    scores: { b1: r1.score, b2: r2.score, b3: r3.score, b4: r4.score, b5: r5.score, b6: r6.score, total: total, zeroed: false },
+    scores: { b1: r1.score, b2: r2.score, b3: r3.score, b4: r4.score, b5: r5.score, b6: r6.score, total: total, zeroed: zeroed },
     details: {
       b1: r1.detail, b2: r2.detail, b3: r3.detail, b4: r4.detail,
       b5Academic: r5.academicDetail, b5NonAcademic: r5.nonAcademicDetail,
@@ -1783,6 +1818,8 @@ function fillForm(s) {
   document.getElementById('f_nation').value = s.nation || '';
   document.getElementById('f_birth').value = s.birth || '';
   document.getElementById('f_activist').value = s.activist || '';
+  document.getElementById('f_zeroed').checked = !!(s.zeroed || (s.scores && s.scores.zeroed));
+  _detailCache.zeroed = document.getElementById('f_zeroed').checked;
   document.getElementById('f_failRecent').value = s.failRecent || 0;
   document.getElementById('f_failTotal').value = s.failTotal || 0;
   document.getElementById('f_cet').value = s.cet || '';
@@ -1829,6 +1866,8 @@ function fillForm(s) {
   document.getElementById('b4_ethnicHelpQuarter').value = b4.ethnicHelpQuarter || 0;
   document.getElementById('b4_branchActivity').value = b4.branchActivity || 0;
   document.getElementById('b4_answerQuestion').value = b4.answerQuestion || 0;
+  document.getElementById('b4_groupActivityScore').value = b4.groupActivityScore || 0;
+  document.getElementById('b4_bigGroupActivity').value = b4.bigGroupActivity || 0;
   document.getElementById('b4_advancedDeed').value = b4.advancedDeed || '';
   document.getElementById('b4_positionDesc').value = b4.positionDesc || '';
   document.getElementById('b4_collectiveAwards').innerHTML = '';
@@ -1898,6 +1937,8 @@ function clearForm() {
     else if (el.type === 'number') el.value = 0;
     else el.value = '';
   });
+  document.getElementById('f_zeroed').checked = false;
+  _detailCache.zeroed = false;
   document.getElementById('b1_noViolation').checked = false;
   document.getElementById('b1_club').value = 0;
   document.getElementById('b1_competitions').innerHTML = '';
@@ -1928,6 +1969,8 @@ function clearForm() {
   document.getElementById('b4_ethnicHelpQuarter').value = 0;
   document.getElementById('b4_branchActivity').value = 0;
   document.getElementById('b4_answerQuestion').value = 0;
+  document.getElementById('b4_groupActivityScore').value = 0;
+  document.getElementById('b4_bigGroupActivity').value = 0;
   document.getElementById('b4_advancedDeed').value = '';
   document.getElementById('b4_positionDesc').value = '';
   document.getElementById('b4_collectiveAwards').innerHTML = '';

@@ -215,8 +215,10 @@ test('keeps every named practice award and all thirteen excellent culture entrie
   ws.N2.w = ws.N2.v;
 
   const first = parseWorkbook(wb).rows[0];
-  assert.equal(first.record.b2.practices.length, 3);
-  assert.deepEqual(first.record.b2.practices.map(item => item.award), ['优秀', '一等奖', '三等奖']);
+  assert.equal(first.record.b2.practices.length, 4);
+  assert.deepEqual(first.record.b2.practices.map(item => item.award), ['优秀', '优秀', '一等奖', '三等奖']);
+  assert.ok(first.record.b2.practices.some(item => /优秀团队/.test(item.name)));
+  assert.ok(first.record.b2.practices.some(item => /优秀个人/.test(item.name)));
   assert.ok(first.record.b2.practices.every(item => item.name && !item.desc));
   assert.equal(first.record.b1.honors.length, 13);
   assert.ok(first.record.b1.honors.some(item => /优秀筹备工作者/.test(item.name)));
