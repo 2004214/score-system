@@ -279,12 +279,24 @@
     const years = new Set();
     let hasUnknownYear = false;
     splitEntries(text).forEach(function(entry) {
-      if (entry.indexOf(keyword) < 0) return;
-      const entryYears = entry.match(/(?:19|20)\d{2}(?=年|[-/.]|\b)/g) || [];
-      if (entryYears.length) {
-        entryYears.forEach(function(year) { years.add(year); });
-      } else {
-        hasUnknownYear = true;
+      const yearMatches = [];
+      const yearPattern = /(?:19|20)\d{2}(?=年|[-/.]|\b)/g;
+      let yearMatch;
+      while ((yearMatch = yearPattern.exec(entry))) {
+        yearMatches.push({ year: yearMatch[0], index: yearMatch.index });
+      }
+      let keywordIndex = entry.indexOf(keyword);
+      while (keywordIndex >= 0) {
+        let nearestYear = null;
+        yearMatches.forEach(function(item) {
+          if (item.index <= keywordIndex && (!nearestYear || item.index > nearestYear.index)) nearestYear = item;
+        });
+        if (!nearestYear && yearMatches.length) {
+          nearestYear = yearMatches.find(function(item) { return item.index > keywordIndex; }) || null;
+        }
+        if (nearestYear) years.add(nearestYear.year);
+        else hasUnknownYear = true;
+        keywordIndex = entry.indexOf(keyword, keywordIndex + keyword.length);
       }
     });
     return years.size + (hasUnknownYear ? 1 : 0);

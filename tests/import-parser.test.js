@@ -89,6 +89,10 @@ test('counts 三下乡 and 返家乡 once per year', () => {
     2
   );
   assert.equal(parser.countAnnualOccurrences('三下乡、三下乡', '三下乡'), 1);
+  assert.equal(
+    parser.countAnnualOccurrences('2023年返家乡活动  2024年三下乡活动', '三下乡'),
+    1
+  );
 });
 
 test('matches every official academic competition to its canonical library name', () => {
